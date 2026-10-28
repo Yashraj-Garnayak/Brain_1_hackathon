@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070d" />
+  <title>TILE RUSH — adaptive reflex trainer</title>
+  <meta name="description" content="A 3x3 reflex game. Find the matching glyph before the board reshuffles. The clock never stops." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <canvas id="backdrop" aria-hidden="true"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <div class="app">
+    <div class="timebar" aria-hidden="true"><i id="timebarFill"></i></div>
+
+    <header class="hud">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <span class="brand-text">TILE<em>RUSH</em></span>
+      </div>
+
+      <div class="clock" id="clock">
+        <span class="clock-label">TIME</span>
+        <b id="timeValue">30.0</b>
+        <span class="clock-unit">s</span>
+      </div>
+
+      <div class="hud-right">
+        <div class="score-block">
+          <span class="micro">SCORE</span>
+          <b id="score">0</b>
+        </div>
+        <div class="elo-chip" id="eloChip" title="Adaptive rating">
+          <span class="rank-dot" id="rankDot"></span>
+          <span class="elo-rank" id="eloRank">IRON</span>
+          <b id="eloValue">1000</b>
+        </div>
+        <button class="icon-btn" id="muteBtn" type="button" aria-pressed="false" title="Toggle sound (M)">
+          <span id="muteIcon">♪</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="stage" aria-label="Game board">
+        <div class="goal" id="goalCard">
+          <div class="goal-icon" id="goalIcon" role="img" aria-label="Target"></div>
+          <div class="goal-copy">
+            <span class="micro">FIND THIS</span>
+            <strong>Same shape. Same colour.</strong>
+            <span class="goal-note">Tap the tile holding the target.</span>
+          </div>
+          <div class="goal-timer">
+            <span class="micro">SHUFFLE</span>
+            <b id="churnValue">3.0</b>
+          </div>
+          <div class="goal-track" id="goalTrack"><i id="goalTrackFill"></i></div>
+        </div>
+
+        <div class="cycle-row">
+          <span class="micro">CYCLE <b id="cycleNum">0/10</b></span>
+          <div class="pips" id="pips" aria-hidden="true"></div>
+          <span class="micro tier-tag">TIER <b id="tier">0</b></span>
+        </div>
+
+        <div class="board">
+          <div class="grid" id="grid" role="group" aria-label="Nine tiles"></div>
+          <div class="fx" id="fx" aria-hidden="true"></div>
+          <div class="toast" id="toast" aria-live="polite"></div>
+          <div class="go-flash" id="goFlash" aria-hidden="true">GO</div>
+        </div>
+
+        <div class="board-foot">
+          <span class="hint"><kbd>1</kbd>–<kbd>9</kbd> tap tiles · <kbd>M</kbd> mute</span>
+          <span class="streak" id="streakWrap">STREAK <b id="streak">0</b></span>
+        </div>
+      </section>
+
+      <aside class="panel" aria-label="Live telemetry">
+        <section class="card">
+          <h2>PRESSURE</h2>
+          <div class="meter"><i id="pressureFill"></i></div>
+          <div class="meter-foot">
+            <span id="pressureLabel">CALM</span>
+            <b id="pressurePct">8%</b>
+          </div>
+        </section>
+
+        <section class="card stat-card">
+          <div><b id="statAcc">100%</b><span>accuracy</span></div>
+          <div><b id="statRt">—</b><span>react</span></div>
+          <div><b id="statStreak">0</b><span>streak</span></div>
+        </section>
+
+        <section class="card">
+          <h2>ADAPTING TO</h2>
+          <div class="weak-row" id="weakRow"></div>
+          <p class="card-note">Misses pull these shapes back into rotation.</p>
+        </section>
+
+        <section class="card">
+          <h2>RECENT RUNS</h2>
+          <div class="runs" id="runs"></div>
+          <div class="runs-foot"><span id="gamesCount">0 runs</span><span id="bestScore">PB 0</span></div>
+        </section>
+
+        <section class="card mini">
+          <div class="mini-row"><span class="micro">MUSIC</span><button class="mini-toggle" id="musicToggle" type="button">ON</button></div>
+          <div class="mini-row"><span class="micro">MOTION</span><button class="mini-toggle" id="motionToggle" type="button">FULL</button></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <!-- INTRO -->
+  <div class="screen show" id="introScreen">
+    <div class="screen-card intro-card">
+      <span class="kicker">ADAPTIVE REFLEX TRAINER</span>
+      <h1 class="title">TILE <em>RUSH</em></h1>
+      <p class="lede">One target. Nine impostors. Thirty seconds that never stop.</p>
+
+      <div class="intro-body">
+        <div class="intro-motif" aria-hidden="true">
+          <div class="motif-grid">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <span>3 × 3 / empty</span>
+        </div>
+        <ol class="rules">
+          <li><span><b>MATCH</b> the target shape and colour before the board reshuffles.</span></li>
+          <li><span><b>CLEAR</b> ten hits to bank bonus seconds — the faster the cycle, the bigger the bank.</span></li>
+          <li><span><b>MISS</b> and the game leans in: weak shapes return, decoys get closer, the tempo climbs.</span></li>
+        </ol>
+      </div>
+
+      <div class="intro-actions">
+        <button class="btn primary" id="startBtn" type="button">START RUN <span>↵</span></button>
+        <div class="intro-meta">
+          <div><span class="micro">PERSONAL BEST</span><b id="introBest">0</b></div>
+          <div><span class="micro">RATING</span><b id="introElo">1000</b></div>
+          <div><span class="micro">RUNS</span><b id="introGames">0</b></div>
+        </div>
+      </div>
+
+      <div class="intro-foot">
+        <span>Timer starts on GO. It does not pause.</span>
+        <button class="linkish" id="resetBtn" type="button">reset data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div class="screen" id="overScreen">
+    <div class="screen-card over-card">
+      <div class="over-head">
+        <span class="kicker" id="overKicker">RUN COMPLETE</span>
+        <span class="new-best" id="newBest">NEW PERSONAL BEST</span>
+      </div>
+      <div class="over-score">
+        <span class="micro">FINAL SCORE</span>
+        <b id="finalScore">0</b>
+      </div>
+
+      <div class="over-grid">
+        <div><b id="finalAcc">0%</b><span>accuracy</span></div>
+        <div><b id="finalRt">0ms</b><span>avg react</span></div>
+        <div><b id="finalCycles">0</b><span>cycles</span></div>
+        <div><b id="finalStreak">0</b><span>best streak</span></div>
+      </div>
+
+      <div class="elo-line">
+        <span class="micro">RATING</span>
+        <b id="eloBefore">1000</b>
+        <span class="arrow">→</span>
+        <b id="eloAfter">1000</b>
+        <span class="delta" id="eloDelta">+0</span>
+        <span class="rank-pill" id="rankPill">IRON</span>
+      </div>
+      <p class="over-note" id="overNote"></p>
+
+      <div class="over-actions">
+        <button class="btn primary" id="againBtn" type="button">RUN IT BACK <span>↵</span></button>
+        <button class="btn ghost" id="homeBtn" type="button">MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/shapes.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/background.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
