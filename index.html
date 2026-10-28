@@ -72,6 +72,12 @@
 
         <div class="board">
           <div class="grid" id="grid" role="group" aria-label="Nine tiles"></div>
+          <div class="countdown" id="countdown" aria-live="assertive" aria-label="Starting in 3 seconds">
+            <span class="countdown-label">GET READY</span>
+            <b id="countdownNum" data-n="3">3</b>
+            <span class="countdown-bar" aria-hidden="true"><i></i></span>
+            <span class="countdown-note">Timer starts at GO</span>
+          </div>
           <div class="fx" id="fx" aria-hidden="true"></div>
           <div class="toast" id="toast" aria-live="polite"></div>
           <div class="go-flash" id="goFlash" aria-hidden="true">GO</div>

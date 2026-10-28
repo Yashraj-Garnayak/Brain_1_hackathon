@@ -14,6 +14,7 @@
   var CONFIG = {
     startTime: 30,
     maxTime: 45,
+    countdownMs: 3000,
     cycleLength: 10,
     cyclePar: 8.6,
     bonusBase: 1.1,
@@ -78,6 +79,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var el = {
     grid: $('grid'), fx: $('fx'), toast: $('toast'), goFlash: $('goFlash'),
+    countdown: $('countdown'), countdownNum: $('countdownNum'),
     timebar: document.querySelector('.timebar'), timebarFill: $('timebarFill'),
     clock: $('clock'), timeValue: $('timeValue'),
     score: $('score'), eloValue: $('eloValue'), eloRank: $('eloRank'), rankDot: $('rankDot'),
@@ -114,7 +116,7 @@
     goal: null, goalIndex: -1, layout: null,
     roundStart: 0, lockUntil: Infinity, resolving: false,
     churnStart: 0, churnDuration: CONFIG.churnSlow, churnDeadline: 0,
-    lastShape: null, lastTickSecond: 99,
+    lastShape: null, lastTickSecond: 99, countdownEnd: 0, countdownNum: 0,
     runSymbols: {}, lastFrame: 0, lastAudio: 0, pressureLabel: '',
     eloBefore: SAVE.elo, eloDelta: 0
   };
@@ -158,7 +160,7 @@
   }
 
   function deal() {
-    if (G.state !== 'playing' && G.state !== 'warmup') return;
+    if (G.state !== 'playing' && G.state !== 'countdown' && G.state !== 'warmup') return;
     var t = now();
     var goalShape = pickGoalShape();
     var goalColor = pick(PALETTE);
@@ -423,11 +425,9 @@
   function startRun() {
     audio.init();
     audio.setMuted(SAVE.settings.muted);
-    audio.startMusic();
-    audio.start();
 
     G.runId++;
-    G.state = 'warmup';
+    G.state = 'countdown';
     G.timeLeft = CONFIG.startTime;
     G.score = 0; G.tier = 0; G.cycleCount = 0; G.cycleProgress = 0;
     G.cycleStart = null; G.pressure = 0.08;
@@ -441,31 +441,65 @@
     G.lastFrame = now();
     G.pressureLabel = '';
     G.eloBefore = SAVE.elo;
+    G.countdownNum = 0;
 
     showScreen(null);
     el.clock.classList.remove('warn', 'danger', 'gain');
     el.timebar.classList.remove('warn', 'danger');
-    deal();
-    refreshRunHud();
-    frameHud(now());
-    flashGo('READY');
+    el.timeValue.textContent = CONFIG.startTime.toFixed(1);
+    el.timebarFill.style.transform = 'scaleX(1)';
 
-    var id = G.runId;
-    function beginPlay() {
-      if (G.runId !== id || G.state !== 'warmup') return;
-      G.state = 'playing';
-      var t = now();
-      G.lastFrame = t;
-      G.lastTickSecond = 99;
-      G.lockUntil = 0;
-      G.cycleStart = t;
-      deal();
-      G.cycleStart = t;
-      flashGo('GO');
-      audio.start();
+    /* Deal once, before the countdown, and carry that exact board into play. */
+    deal();
+    G.cycleStart = null;
+    G.countdownEnd = now() + CONFIG.countdownMs;
+    el.churnValue.textContent = (G.churnDuration / 1000).toFixed(1);
+    el.churnWrap.classList.remove('urgent');
+    el.goalTrack.classList.remove('urgent');
+    el.goalTrackFill.style.transform = 'scaleX(1)';
+    refreshRunHud();
+
+    if (params.has('instant')) {
+      beginPlay();
+      return;
     }
-    if (params.has('instant')) beginPlay();
-    else setTimeout(beginPlay, 820);
+    setCountdown(3);
+  }
+
+  function beginPlay() {
+    if (G.state !== 'countdown') return;
+    G.state = 'playing';
+    var t = now();
+    G.lastFrame = t;
+    G.lastTickSecond = 99;
+    G.lockUntil = 0;
+    G.roundStart = t;
+    G.cycleStart = t;
+    G.churnStart = t;
+    G.churnDuration = churnMs();
+    G.churnDeadline = t + G.churnDuration;
+    G.resolving = false;
+    hideCountdown();
+    flashGo('GO');
+    audio.startMusic();
+    audio.start();
+  }
+
+  function setCountdown(n) {
+    G.countdownNum = n;
+    el.countdownNum.textContent = String(n);
+    el.countdownNum.dataset.n = String(n);
+    el.countdown.setAttribute('aria-label', 'Starting in ' + n + (n === 1 ? ' second' : ' seconds'));
+    el.countdownNum.classList.remove('tick');
+    void el.countdownNum.offsetWidth;
+    el.countdownNum.classList.add('tick');
+    el.countdown.classList.add('show');
+    audio.countdown(n);
+  }
+
+  function hideCountdown() {
+    el.countdown.classList.remove('show');
+    el.countdownNum.classList.remove('tick');
   }
 
   function toMenu() {
@@ -733,6 +767,12 @@
       }
     } else {
       G.lastFrame = t;
+      if (G.state === 'countdown') {
+        var remain = G.countdownEnd - t;
+        var num = Math.max(1, Math.ceil(remain / 1000));
+        if (num !== G.countdownNum) setCountdown(num);
+        if (remain <= 0) beginPlay();
+      }
     }
     frameHud(t);
   }

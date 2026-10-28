@@ -308,6 +308,14 @@
       this.noiseHit(t, 900, 0.6, 0.04, 0.9, 'lowpass', this.sfx);
     },
 
+    countdown: function (n) {
+      if (!this.ready() || this.muted) return;
+      var t = this.ctx.currentTime + 0.005;
+      var freq = n === 1 ? 880 : n === 2 ? 659.25 : 523.25;
+      this.tone('sine', freq, t, 0.18, 0.09, this.sfx);
+      this.tone('triangle', freq * 2, t, 0.09, 0.025, this.sfx);
+    },
+
     start: function () {
       if (!this.ready() || this.muted) return;
       var t = this.ctx.currentTime + 0.01;

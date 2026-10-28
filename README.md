@@ -16,12 +16,13 @@ Open <http://localhost:8787>. You can also open `index.html` directly — everyt
 
 ## The loop
 
-1. A target glyph (shape **and** colour) appears at the top.
-2. Nine tiles hold decoys. Exactly one matches the target.
-3. The board reshuffles every **3 seconds**. It tightens toward ~1.1s as pressure rises.
-4. Ten correct taps clear a **cycle**. The clock is 30s and never pauses; a fast cycle banks bonus seconds and the next tier starts immediately.
-5. A wrong tap costs **1 second**, 30 points and your streak. An unanswered reshuffle is a miss.
-6. The run ends when the clock reaches zero.
+1. Start deals the board once and runs a **3-second countdown** with the tiles blurred, so nobody can pre-scan. At GO the same board is revealed — it is **not** re-dealt — and the clock and shuffle timer start.
+2. A target glyph (shape **and** colour) appears at the top.
+3. Nine tiles hold decoys. Exactly one matches the target.
+4. The board reshuffles every **3 seconds**. It tightens toward ~1.1s as pressure rises.
+5. Ten correct taps clear a **cycle**. The clock is 30s and never pauses; a fast cycle banks bonus seconds and the next tier starts immediately.
+6. A wrong tap costs **1 second**, 30 points and your streak. An unanswered reshuffle is a miss.
+7. The run ends when the clock reaches zero.
 
 Scoring per hit:
 
@@ -81,7 +82,7 @@ delta    = clamp(K × (actual − expected), −60, +60)
 ## Dev flags
 
 - `?autostart=1` — skip the menu.
-- `?instant=1` — skip the READY warm-up.
+- `?instant=1` — skip the 3-second countdown (starts on the dealt board).
 - `?still=1` — disable transitions/animations (useful for screenshots).
 
 ## Tuning
