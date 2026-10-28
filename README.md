@@ -1,18 +1,31 @@
 # TILE RUSH
 
-A browser prototype of a 3×3 reflex game with an adaptive difficulty director, a non-stopping clock, procedural pressure music, and an Elo-style rating.
+A browser 3×3 reflex game with an adaptive difficulty director, a non-stopping clock, procedural pressure music, an Elo-style rating, accounts, and a global leaderboard.
 
-No build step, no dependencies, no backend. Plain HTML/CSS/JS.
+The game itself is plain HTML/CSS/JS with no build step. Accounts, sessions and the leaderboard are Neon Postgres behind Vercel serverless functions in `api/`.
 
 ## Run it
 
-From this folder:
-
 ```bash
-python3 -m http.server 8787
+npm install
+npm run migrate      # applies db/schema.sql to DATABASE_URL_UNPOOLED
+npx vercel dev       # serves the site and /api on http://localhost:3000
 ```
 
-Open <http://localhost:8787>. You can also open `index.html` directly — everything is local except the optional Google Fonts. The folder is fully static, so it works as-is on GitHub Pages (serve the folder that contains `index.html`).
+`npm run migrate` reads `DATABASE_URL_UNPOOLED` (falling back to `DATABASE_URL`). Locally those come from `.env.local`, which is created by `vercel env pull` after the Neon integration is connected.
+
+A plain static server (`python3 -m http.server`) still works for the game loop, but without `/api` there are no accounts or leaderboard. Use the `?api=http://localhost:3000` flag if you serve the files from a different port.
+
+## Accounts and leaderboard
+
+- Username + password only. No email, OAuth or social login.
+- Usernames are unique case-insensitively: `^[A-Za-z0-9_]{3,16}$`, displayed in the casing you chose.
+- Passwords are hashed with scrypt. Sessions are random 256-bit tokens stored hashed in Postgres and sent as an HTTP-only `tr_session` cookie valid for 120 days, so a refresh keeps you signed in.
+- Start requires an account. There is also a **play without an account** escape hatch; those runs are never ranked.
+- The server owns the rating: it computes the Elo delta from the submitted score, tier, accuracy and average reaction time, then updates the player's best score and rating atomically.
+- `HIGH SCORE` and `RATING` boards exclude players with zero ranked runs. The board footer shows your own rank and an "online now" count based on `last_seen`.
+- Clicking your callsign in the HUD opens the leaderboard; the panel's **GLOBAL** card shows the current top three.
+- The old **reset data** control is hidden for regular players. It only appears with `?dev=1` and only clears local guest data, never your account.
 
 ## The loop
 
@@ -61,7 +74,7 @@ Inspired by keybr.com's weak-key drilling:
 
 ## Rating
 
-Elo-style, starting at 1000. After a run:
+Elo-style, starting at 1000, computed on the server. After a run:
 
 ```
 actual   = 0.55 × accuracy + 0.30 × reactionSpeed + 0.15 × tierReached
@@ -70,7 +83,7 @@ expected = 1 / (1 + 10^((opponent − rating) / 400))
 delta    = clamp(K × (actual − expected), −60, +60)
 ```
 
-`K` is 44 for the first 10 runs, then 28. Ranks: Iron → Bronze → Silver → Gold → Platinum → Diamond → Nova. Best score, recent runs, rating and adaptive history persist locally.
+`K` is 44 for the first 10 runs, then 28. Ranks: Iron → Bronze → Silver → Gold → Platinum → Diamond → Nova. Best score, rating and games are stored in Postgres; settings and adaptation stats stay in `localStorage` per device.
 
 ## Controls
 
@@ -81,9 +94,22 @@ delta    = clamp(K × (actual − expected), −60, +60)
 
 ## Dev flags
 
-- `?autostart=1` — skip the menu.
+- `?autostart=1` — skip the menu and the sign-in gate.
 - `?instant=1` — skip the 3-second countdown (starts on the dealt board).
 - `?still=1` — disable transitions/animations (useful for screenshots).
+- `?dev=1` — reveal the local-only reset control.
+- `?api=https://…` — point the client at another API origin.
+
+## API
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | Create an account and open a session |
+| `POST` | `/api/auth/login` | Verify credentials and open a session |
+| `POST` | `/api/auth/logout` | Destroy the session and clear the cookie |
+| `GET` | `/api/auth/me` | Current account (or `null`) and touch `last_seen` |
+| `POST` | `/api/runs` | Submit a ranked run; returns the authoritative rating |
+| `GET` | `/api/leaderboard?by=score\|rating&limit=50` | Ranked players, your rank, players and online totals |
 
 ## Tuning
 
@@ -97,5 +123,16 @@ css/styles.css
 js/shapes.js       geometric glyph set + palette
 js/audio.js        WebAudio sequencer + SFX
 js/background.js   canvas backdrop
+js/account.js      session + leaderboard client
 js/game.js         state machine, adaptive director, scoring, Elo, UI
+api/auth/*.js      register / login / logout / me
+api/runs.js        ranked run submission
+api/leaderboard.js score + rating boards
+lib/auth.js        scrypt, cookies, sessions
+lib/db.js          pooled Neon connection
+lib/elo.js         server-side Elo
+lib/http.js        JSON/body/error helpers
+lib/users.js       account + leaderboard queries
+db/schema.sql      users / sessions / runs
+scripts/migrate.mjs migration runner
 ```

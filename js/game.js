@@ -97,8 +97,25 @@
     overScreen: $('overScreen'), finalScore: $('finalScore'), finalAcc: $('finalAcc'), finalRt: $('finalRt'),
     finalCycles: $('finalCycles'), finalStreak: $('finalStreak'),
     eloBefore: $('eloBefore'), eloAfter: $('eloAfter'), eloDelta: $('eloDelta'), rankPill: $('rankPill'),
-    overNote: $('overNote'), newBest: $('newBest'), againBtn: $('againBtn'), homeBtn: $('homeBtn')
+    overNote: $('overNote'), newBest: $('newBest'), againBtn: $('againBtn'), homeBtn: $('homeBtn'),
+    overBoardBtn: $('overBoardBtn'),
+    accountBtn: $('accountBtn'), accountAvatar: $('accountAvatar'), accountName: $('accountName'),
+    authScreen: $('authScreen'), authClose: $('authClose'), authTitle: $('authTitle'), authLede: $('authLede'),
+    authForm: $('authForm'), authUser: $('authUser'), authPass: $('authPass'),
+    authConfirm: $('authConfirm'), authConfirmWrap: $('authConfirmWrap'), authError: $('authError'),
+    authSubmit: $('authSubmit'), authGuest: $('authGuest'), tabLogin: $('tabLogin'), tabRegister: $('tabRegister'),
+    boardScreen: $('boardScreen'), boardClose: $('boardClose'), boardList: $('boardList'),
+    boardPlayers: $('boardPlayers'), boardOnline: $('boardOnline'), boardMe: $('boardMe'),
+    boardIdentity: $('boardIdentity'), boardLogout: $('boardLogout'), boardTitle: $('boardTitle'),
+    introBoardBtn: $('introBoardBtn'), panelBoardBtn: $('panelBoardBtn'), globalTop: $('globalTop')
   };
+
+  var Account = window.Account;
+  var authMode = 'login';
+  var pendingStart = false;
+  var guestMode = false;
+  var boardSort = 'score';
+  var boardRequest = 0;
 
   var audio = new window.AudioEngine();
   var backdrop = new window.Backdrop($('backdrop'));
@@ -419,6 +436,7 @@
     refreshMeta();
     showScreen(el.overScreen);
     backdrop.pulse(1.4);
+    submitRun(G.score, G.tier, acc, rt, G.runId);
   }
 
   /* ---------- run lifecycle ---------- */
@@ -534,12 +552,17 @@
   el.grid.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (el.authScreen.classList.contains('show')) { closeAuth(); return; }
+      if (el.boardScreen.classList.contains('show')) { closeBoard(); return; }
+    }
+    if (el.authScreen.classList.contains('show') || el.boardScreen.classList.contains('show')) return;
     if (e.key === 'Enter') {
-      if (G.state === 'intro' || G.state === 'over') { e.preventDefault(); startRun(); }
+      if (G.state === 'intro' || G.state === 'over') { e.preventDefault(); requestStart(); }
       return;
     }
     if (e.key === ' ') {
-      if (G.state === 'intro' || G.state === 'over') { e.preventDefault(); startRun(); }
+      if (G.state === 'intro' || G.state === 'over') { e.preventDefault(); requestStart(); }
       return;
     }
     if (e.key === 'm' || e.key === 'M') { toggleMute(); return; }
@@ -747,6 +770,8 @@
   function showScreen(node) {
     el.introScreen.classList.toggle('show', node === el.introScreen);
     el.overScreen.classList.toggle('show', node === el.overScreen);
+    el.authScreen.classList.toggle('show', node === el.authScreen);
+    el.boardScreen.classList.toggle('show', node === el.boardScreen);
   }
 
   /* ---------- main loop ---------- */
@@ -780,6 +805,235 @@
     frameHud(t);
   }
 
+  /* ---------- account + leaderboard ---------- */
+  function signedIn() { return !!(Account && Account.user()); }
+
+  function syncSaveFromUser(user) {
+    if (!user) return;
+    SAVE.elo = Number(user.rating) || 1000;
+    SAVE.best = Number(user.bestScore) || 0;
+    SAVE.bestTier = Number(user.bestTier) || 0;
+    SAVE.games = Number(user.games) || 0;
+    persist();
+  }
+
+  function renderAccount() {
+    var user = Account && Account.user();
+    if (user) {
+      el.accountAvatar.textContent = String(user.username).charAt(0).toUpperCase();
+      el.accountName.textContent = '@' + user.username;
+      el.accountBtn.classList.add('signed');
+      el.accountBtn.title = 'Signed in as @' + user.username + ' — open leaderboard';
+      el.boardIdentity.textContent = 'Signed in as @' + user.username;
+      el.boardLogout.hidden = false;
+    } else {
+      el.accountAvatar.textContent = '?';
+      el.accountName.textContent = 'SIGN IN';
+      el.accountBtn.classList.remove('signed');
+      el.accountBtn.title = 'Sign in to rank your runs';
+      el.boardIdentity.textContent = 'Not signed in — runs are unranked';
+      el.boardLogout.hidden = true;
+    }
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode === 'register' ? 'register' : 'login';
+    var register = authMode === 'register';
+    el.tabLogin.classList.toggle('active', !register);
+    el.tabRegister.classList.toggle('active', register);
+    el.tabLogin.setAttribute('aria-selected', String(!register));
+    el.tabRegister.setAttribute('aria-selected', String(register));
+    el.authConfirmWrap.hidden = !register;
+    el.authTitle.innerHTML = register ? 'Claim your <em>callsign</em>' : 'Sign in to <em>rank</em>';
+    el.authLede.textContent = register
+      ? 'Pick 3–16 letters, numbers or underscores. Your callsign is unique and permanent.'
+      : 'Your username is your leaderboard identity. No email, no socials.';
+    el.authSubmit.innerHTML = register ? 'CREATE &amp; PLAY <span>↵</span>' : 'LOG IN &amp; PLAY <span>↵</span>';
+    el.authPass.setAttribute('autocomplete', register ? 'new-password' : 'current-password');
+    el.authPass.setAttribute('placeholder', register ? 'At least 6 characters' : 'Your password');
+    el.authError.textContent = '';
+  }
+
+  function openAuth(forStart) {
+    pendingStart = !!forStart;
+    setAuthMode('login');
+    el.authForm.reset();
+    showScreen(el.authScreen);
+    setTimeout(function () { el.authUser.focus(); }, 80);
+  }
+
+  function closeAuth() {
+    showScreen(G.state === 'over' ? el.overScreen : G.state === 'intro' ? el.introScreen : null);
+  }
+
+  function requestStart() {
+    if (signedIn()) { startRun(); return; }
+    if (guestMode) { startRun(); return; }
+    if (!Account) { openAuth(true); return; }
+    Account.ready().then(function (user) {
+      if (user) startRun();
+      else openAuth(true);
+    });
+  }
+
+  function submitAuth(e) {
+    if (e) e.preventDefault();
+    if (!Account) return;
+    var username = el.authUser.value.trim();
+    var password = el.authPass.value;
+    var confirm = el.authConfirm.value;
+
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(username)) {
+      el.authError.textContent = 'Username must be 3–16 letters, numbers or underscores.';
+      return;
+    }
+    if (password.length < 6) {
+      el.authError.textContent = 'Password must be at least 6 characters.';
+      return;
+    }
+    if (authMode === 'register' && password !== confirm) {
+      el.authError.textContent = 'Passwords do not match.';
+      return;
+    }
+
+    var shouldStart = pendingStart;
+    el.authError.textContent = '';
+    el.authSubmit.disabled = true;
+    el.authSubmit.innerHTML = authMode === 'register' ? 'CREATING…' : 'LOGGING IN…';
+
+    var call = authMode === 'register'
+      ? Account.register(username, password)
+      : Account.login(username, password);
+
+    call.then(function (user) {
+      guestMode = false;
+      pendingStart = false;
+      syncSaveFromUser(user);
+      renderAccount();
+      refreshMeta();
+      loadGlobalCard();
+      if (shouldStart) startRun();
+      else closeAuth();
+    }).catch(function (err) {
+      el.authError.textContent = err && err.message ? err.message : 'Could not sign in. Try again.';
+    }).then(function () {
+      el.authSubmit.disabled = false;
+      el.authSubmit.innerHTML = authMode === 'register'
+        ? 'CREATE &amp; PLAY <span>↵</span>'
+        : 'LOG IN &amp; PLAY <span>↵</span>';
+    });
+  }
+
+  function openBoard(by) {
+    if (G.state === 'playing' || G.state === 'countdown') return;
+    boardSort = by === 'rating' ? 'rating' : 'score';
+    var tabs = document.querySelectorAll('.board-tab');
+    for (var i = 0; i < tabs.length; i++) {
+      var on = tabs[i].dataset.by === boardSort;
+      tabs[i].classList.toggle('active', on);
+      tabs[i].setAttribute('aria-selected', String(on));
+    }
+    showScreen(el.boardScreen);
+    loadBoard();
+  }
+
+  function closeBoard() {
+    showScreen(G.state === 'over' ? el.overScreen : G.state === 'intro' ? el.introScreen : null);
+  }
+
+  function loadBoard() {
+    if (!Account) return;
+    var id = ++boardRequest;
+    el.boardList.innerHTML = '<p class="board-empty">Loading the board…</p>';
+    el.boardMe.hidden = true;
+    Account.leaderboard(boardSort, 50).then(function (data) {
+      if (id !== boardRequest) return;
+      renderBoard(data);
+    }).catch(function () {
+      if (id !== boardRequest) return;
+      el.boardList.innerHTML = '<p class="board-empty">The board is unavailable right now. Try again.</p>';
+    });
+  }
+
+  function renderBoard(data) {
+    var user = Account && Account.user();
+    var label = boardSort === 'rating' ? 'RATING' : 'HIGH SCORE';
+    el.boardPlayers.textContent = data.players + (data.players === 1 ? ' ranked player' : ' ranked players');
+    el.boardOnline.textContent = data.online + ' online now';
+
+    if (!data.entries.length) {
+      el.boardList.innerHTML = '<p class="board-empty">No ranked runs yet. Be the first on the board.</p>';
+    } else {
+      var html = '';
+      for (var i = 0; i < data.entries.length; i++) {
+        var row = data.entries[i];
+        var mine = user && row.id === user.id;
+        var value = boardSort === 'rating' ? row.rating : row.bestScore;
+        html += '<div class="board-row' + (mine ? ' me' : '') + '" data-rank="' + row.rank + '">' +
+          '<span class="board-rank">' + String(row.rank).padStart(2, '0') + '</span>' +
+          '<span class="board-name">' + row.username +
+          (mine ? '<span class="board-you">YOU</span>' : '') +
+          '<small>' + row.games + (row.games === 1 ? ' run' : ' runs') + '</small></span>' +
+          '<span class="board-val">' + fmt(value) + '<em>' + label + '</em></span>' +
+          '</div>';
+      }
+      el.boardList.innerHTML = html;
+    }
+
+    if (data.me) {
+      var myValue = boardSort === 'rating' ? data.me.rating : data.me.bestScore;
+      el.boardMe.innerHTML = 'YOUR RANK <b>#' + data.me.rank + '</b> · ' + fmt(myValue) +
+        ' <span style="color:var(--dim)">' + label + '</span>';
+      el.boardMe.hidden = false;
+    } else if (user) {
+      el.boardMe.textContent = 'Play one ranked run to enter this board.';
+      el.boardMe.hidden = false;
+    } else {
+      el.boardMe.textContent = 'Sign in to rank your runs and claim a spot.';
+      el.boardMe.hidden = false;
+    }
+  }
+
+  function loadGlobalCard() {
+    if (!Account || !el.globalTop) return;
+    Account.leaderboard('score', 3).then(function (data) {
+      if (!data.entries.length) {
+        el.globalTop.innerHTML = '<p class="card-note">No ranked players yet. Be the first.</p>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < data.entries.length; i++) {
+        var row = data.entries[i];
+        html += '<div class="global-row"><span class="gr">' + String(row.rank).padStart(2, '0') + '</span>' +
+          '<span class="gn">' + row.username + '</span>' +
+          '<span class="gv">' + fmt(row.bestScore) + '</span></div>';
+      }
+      el.globalTop.innerHTML = html;
+    }).catch(function () {
+      el.globalTop.innerHTML = '<p class="card-note">Leaderboard unavailable.</p>';
+    });
+  }
+
+  function submitRun(score, tier, accuracy, avgRt, runId) {
+    if (!Account || !Account.user()) return;
+    Account.submitRun({ score: score, tier: tier, accuracy: accuracy, avgRt: avgRt }).then(function (data) {
+      syncSaveFromUser(data.user);
+      if (G.runId === runId && G.state === 'over') {
+        var rank = rankOf(data.run.after);
+        el.eloBefore.textContent = String(data.run.before);
+        el.eloAfter.textContent = String(data.run.after);
+        el.eloDelta.textContent = (data.run.delta >= 0 ? '+' : '') + data.run.delta;
+        el.eloDelta.className = 'delta ' + (data.run.delta >= 0 ? 'up' : 'down');
+        el.rankPill.textContent = rank.name;
+        el.rankPill.style.color = rank.color;
+      }
+      refreshMeta();
+      loadGlobalCard();
+    }).catch(function (err) {
+      if (err && err.status === 401 && Account) Account.refresh();
+    });
+  }
+
   /* ---------- boot ---------- */
   function buildGrid() {
     for (var i = 0; i < 9; i++) {
@@ -798,23 +1052,75 @@
   document.body.classList.toggle('no-motion', !SAVE.settings.motion);
   var params = new URLSearchParams(window.location.search);
   if (params.has('still')) document.body.classList.add('still');
+  if (params.has('dev')) el.resetBtn.hidden = false;
   refreshMeta();
   showIdle();
   frameHud(now());
 
-  el.startBtn.addEventListener('click', startRun);
-  el.againBtn.addEventListener('click', startRun);
+  el.startBtn.addEventListener('click', requestStart);
+  el.againBtn.addEventListener('click', requestStart);
   el.homeBtn.addEventListener('click', toMenu);
+  el.overBoardBtn.addEventListener('click', function () { openBoard('score'); });
   el.muteBtn.addEventListener('click', toggleMute);
   el.musicToggle.addEventListener('click', toggleMute);
   el.motionToggle.addEventListener('click', toggleMotion);
   el.resetBtn.addEventListener('click', function () {
-    if (!window.confirm('Reset your rating, best score and adaptive history?')) return;
+    if (!window.confirm('Reset your local rating, best score and adaptive history? (Your account is not affected.)')) return;
     SAVE = defaultSave();
     persist();
     refreshMeta();
     showIdle();
   });
+
+  el.accountBtn.addEventListener('click', function () {
+    if (signedIn()) openBoard('score');
+    else openAuth(false);
+  });
+  el.introBoardBtn.addEventListener('click', function () { openBoard('score'); });
+  el.panelBoardBtn.addEventListener('click', function () { openBoard('score'); });
+  el.authClose.addEventListener('click', closeAuth);
+  el.boardClose.addEventListener('click', closeBoard);
+  el.tabLogin.addEventListener('click', function () { setAuthMode('login'); });
+  el.tabRegister.addEventListener('click', function () { setAuthMode('register'); });
+  el.authForm.addEventListener('submit', submitAuth);
+  el.authGuest.addEventListener('click', function () {
+    var shouldStart = pendingStart;
+    guestMode = true;
+    pendingStart = false;
+    closeAuth();
+    if (shouldStart) startRun();
+  });
+
+  var boardTabs = document.querySelectorAll('.board-tab');
+  for (var b = 0; b < boardTabs.length; b++) {
+    boardTabs[b].addEventListener('click', function () {
+      openBoard(this.dataset.by);
+    });
+  }
+
+  el.boardLogout.addEventListener('click', function () {
+    if (!Account) return;
+    Account.logout().then(function () {
+      renderAccount();
+      closeBoard();
+      refreshMeta();
+      loadGlobalCard();
+    }).catch(function () { /* ignore */ });
+  });
+
+  if (Account) {
+    Account.onChange(function (user) {
+      renderAccount();
+      if (user) {
+        syncSaveFromUser(user);
+        refreshMeta();
+      }
+      loadGlobalCard();
+    });
+    Account.init();
+  } else {
+    renderAccount();
+  }
 
   requestAnimationFrame(loop);
 

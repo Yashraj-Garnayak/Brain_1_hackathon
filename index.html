@@ -42,6 +42,10 @@
           <span class="elo-rank" id="eloRank">IRON</span>
           <b id="eloValue">1000</b>
         </div>
+        <button class="account-chip" id="accountBtn" type="button" title="Account and leaderboard">
+          <span class="account-avatar" id="accountAvatar">?</span>
+          <span class="account-name" id="accountName">…</span>
+        </button>
         <button class="icon-btn" id="muteBtn" type="button" aria-pressed="false" title="Toggle sound (M)">
           <span id="muteIcon">♪</span>
         </button>
@@ -105,13 +109,21 @@
           <div><b id="statStreak">0</b><span>streak</span></div>
         </section>
 
-        <section class="card">
+        <section class="card adapt-card">
           <h2>ADAPTING TO</h2>
           <div class="weak-row" id="weakRow"></div>
           <p class="card-note">Misses pull these shapes back into rotation.</p>
         </section>
 
-        <section class="card">
+        <section class="card global-card">
+          <h2>GLOBAL</h2>
+          <div class="global-top" id="globalTop">
+            <p class="card-note">Checking the board…</p>
+          </div>
+          <button class="global-open" id="panelBoardBtn" type="button">OPEN LEADERBOARD <span>↗</span></button>
+        </section>
+
+        <section class="card recent-card">
           <h2>RECENT RUNS</h2>
           <div class="runs" id="runs"></div>
           <div class="runs-foot"><span id="gamesCount">0 runs</span><span id="bestScore">PB 0</span></div>
@@ -157,7 +169,10 @@
 
       <div class="intro-foot">
         <span>Timer starts on GO. It does not pause.</span>
-        <button class="linkish" id="resetBtn" type="button">reset data</button>
+        <span class="intro-links">
+          <button class="linkish" id="introBoardBtn" type="button">leaderboard</button>
+          <button class="linkish" id="resetBtn" type="button" hidden>reset data</button>
+        </span>
       </div>
     </div>
   </div>
@@ -193,7 +208,79 @@
 
       <div class="over-actions">
         <button class="btn primary" id="againBtn" type="button">RUN IT BACK <span>↵</span></button>
+        <button class="btn ghost" id="overBoardBtn" type="button">LEADERBOARD</button>
         <button class="btn ghost" id="homeBtn" type="button">MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTH -->
+  <div class="screen modal-screen" id="authScreen">
+    <div class="screen-card auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <button class="modal-x" id="authClose" type="button" aria-label="Close">×</button>
+      <span class="kicker">YOUR CALLSIGN</span>
+      <h2 class="auth-title" id="authTitle">Sign in to <em>rank</em></h2>
+      <p class="auth-lede" id="authLede">Your username is your leaderboard identity. No email, no socials.</p>
+
+      <div class="auth-tabs" role="tablist" aria-label="Account mode">
+        <button class="auth-tab active" id="tabLogin" type="button" role="tab" data-mode="login" aria-selected="true">LOG IN</button>
+        <button class="auth-tab" id="tabRegister" type="button" role="tab" data-mode="register" aria-selected="false">CREATE ACCOUNT</button>
+      </div>
+
+      <form id="authForm" novalidate>
+        <label class="field">
+          <span>USERNAME</span>
+          <input id="authUser" name="username" type="text" maxlength="16" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="reflexkid" required />
+        </label>
+        <label class="field">
+          <span>PASSWORD</span>
+          <input id="authPass" name="password" type="password" maxlength="128" autocomplete="current-password" placeholder="At least 6 characters" required />
+        </label>
+        <label class="field" id="authConfirmWrap" hidden>
+          <span>CONFIRM PASSWORD</span>
+          <input id="authConfirm" name="confirm" type="password" maxlength="128" autocomplete="new-password" placeholder="Repeat password" />
+        </label>
+        <p class="auth-error" id="authError" role="alert"></p>
+        <button class="btn primary auth-submit" id="authSubmit" type="submit">LOG IN &amp; PLAY <span>↵</span></button>
+      </form>
+
+      <div class="auth-foot">
+        <button class="linkish" id="authGuest" type="button">play without an account</button>
+        <span>Unranked runs are not saved.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="screen modal-screen" id="boardScreen">
+    <div class="screen-card board-card" role="dialog" aria-modal="true" aria-labelledby="boardTitle">
+      <div class="board-head">
+        <div>
+          <span class="kicker">WORLDWIDE</span>
+          <h2 class="board-title" id="boardTitle">LEADERBOARD</h2>
+        </div>
+        <button class="modal-x" id="boardClose" type="button" aria-label="Close">×</button>
+      </div>
+
+      <div class="board-tabs" role="tablist" aria-label="Leaderboard sort">
+        <button class="board-tab active" type="button" role="tab" data-by="score" aria-selected="true">HIGH SCORE</button>
+        <button class="board-tab" type="button" role="tab" data-by="rating" aria-selected="false">RATING</button>
+      </div>
+
+      <div class="board-stats">
+        <span id="boardPlayers">0 ranked players</span>
+        <span id="boardOnline">0 online now</span>
+      </div>
+
+      <div class="board-list" id="boardList" aria-live="polite">
+        <p class="board-empty">Loading the board…</p>
+      </div>
+
+      <div class="board-me" id="boardMe" hidden></div>
+
+      <div class="board-foot">
+        <span id="boardIdentity">Not signed in</span>
+        <button class="linkish" id="boardLogout" type="button" hidden>log out</button>
       </div>
     </div>
   </div>
@@ -201,6 +288,7 @@
   <script src="js/shapes.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/background.js"></script>
+  <script src="js/account.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

@@ -2,3 +2,4 @@
 .preview/
 .vercel
 .env*
+node_modules/
