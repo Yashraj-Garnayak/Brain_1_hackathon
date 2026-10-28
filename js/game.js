@@ -452,6 +452,7 @@
     /* Deal once, before the countdown, and carry that exact board into play. */
     deal();
     G.cycleStart = null;
+    el.goalCard.classList.add('locked');
     G.countdownEnd = now() + CONFIG.countdownMs;
     el.churnValue.textContent = (G.churnDuration / 1000).toFixed(1);
     el.churnWrap.classList.remove('urgent');
@@ -479,6 +480,7 @@
     G.churnDuration = churnMs();
     G.churnDeadline = t + G.churnDuration;
     G.resolving = false;
+    el.goalCard.classList.remove('locked');
     hideCountdown();
     flashGo('GO');
     audio.startMusic();
@@ -703,6 +705,7 @@
     el.goalTrack.classList.remove('urgent');
     el.churnWrap.classList.remove('urgent');
     el.goalIcon.innerHTML = '';
+    el.goalCard.classList.remove('locked');
     el.clock.classList.remove('warn', 'danger', 'gain');
     el.timebar.classList.remove('warn', 'danger');
     for (var i = 0; i < tiles.length; i++) {

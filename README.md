@@ -16,7 +16,7 @@ Open <http://localhost:8787>. You can also open `index.html` directly — everyt
 
 ## The loop
 
-1. Start deals the board once and runs a **3-second countdown** with the tiles blurred, so nobody can pre-scan. At GO the same board is revealed — it is **not** re-dealt — and the clock and shuffle timer start.
+1. Start deals the board once and runs a **3-second countdown** with both the target and the tiles blurred out, so nobody can pre-scan. At GO the same board is revealed — it is **not** re-dealt — and the clock and shuffle timer start.
 2. A target glyph (shape **and** colour) appears at the top.
 3. Nine tiles hold decoys. Exactly one matches the target.
 4. The board reshuffles every **3 seconds**. It tightens toward ~1.1s as pressure rises.
