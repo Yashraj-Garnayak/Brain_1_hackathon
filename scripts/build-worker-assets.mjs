@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'worker', 'public');
-const entries = ['index.html', 'css', 'js', 'shared'];
+const entries = ['index.html', 'health.html', 'insights.html', 'css', 'js', 'shared'];
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
