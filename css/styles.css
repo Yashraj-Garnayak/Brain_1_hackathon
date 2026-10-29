@@ -2806,3 +2806,5 @@ body {
 .duel-hud, .duel-feed .duel-bubble { background: rgba(23, 21, 19, .94); }
 body.spectating .duel-screen { background: rgba(11, 10, 9, .96); }
 body.spectating .duel-card { background: linear-gradient(170deg, #1d1a17, #0b0a09); }
+/* While a full-screen overlay is open, the page behind it must not scroll. */
+body:has(.screen.show) { overflow: hidden; }
