@@ -187,21 +187,23 @@ worker/              Cloudflare Worker + Durable Objects scaffold
 
 ## Cloudflare / 1v1
 
-The realtime phase runs on a Cloudflare Worker with Durable Objects; the REST API stays on Vercel/Neon until the Worker data layer is ported.
+The realtime phase runs on a Cloudflare Worker with Durable Objects; the REST API stays on Vercel/Neon until the Worker data layer is ported. **No paid plan is needed:** Workers Free includes SQLite-backed Durable Objects (our config uses `new_sqlite_classes`), with 100k DO requests/day, 13k GB-s/day and 1 GB storage per object. Static assets are not counted against the Worker quota.
 
 ```bash
-cd worker
-npx wrangler dev        # local Worker on :8787 (static assets + realtime API)
-npx wrangler deploy     # requires `npx wrangler login` and a Cloudflare account
+npm run worker:assets   # copy index.html, css/, js/, shared/ into worker/public
+npm run worker:dev      # local Worker on :8787 (static assets + realtime API)
+npm run worker:deploy   # requires `npx wrangler login` (free account)
 ```
 
 `worker/src/index.js` serves `/api/health`, `/api/match/queue` and `/api/match/:id/ws`, then falls back to static assets. `MatchRoom` is a hibernating WebSocket Durable Object for a 1v1 match (join, ready, emote, round progress, result); `QueueRoom` pairs two players and creates a match id.
 
+`uday.live` is on Vercel DNS, so use the free `<worker>.<subdomain>.workers.dev` hostname rather than a `uday.live` subdomain. Cookies do not cross hostnames; mint a short-lived signed match ticket from `/api/match/ticket` on Vercel and hand it to the Worker.
+
 Next steps for the full cutover:
 
-1. `wrangler login`, create the account/namespace, set `API_ORIGIN` to the current Vercel deployment.
+1. `wrangler login` with a free account, `npm run worker:deploy`, set `API_ORIGIN`.
 2. Port `api/*` to Worker routes (Neon HTTP driver or Hyperdrive) and point the client at the Worker.
 3. Move `/api/runs` scoring into the Worker so BPI and Elo are computed at the edge.
-4. Design 1v1 mechanics on top of `MatchRoom`: shared seed, same board order, five 12-second rounds, emotes during breaks, rating delta on match result.
+4. Wire `MatchRoom` into the client: shared seed, same board order, the existing three rounds, emotes during the 5-second breaks, and a head-to-head rating delta.
 
 Until then the Vercel deployment remains the source of truth, and 1v1 is not exposed in the UI.

@@ -29,26 +29,39 @@ directory at the repo root; `.env.local` lives there.
 
 ## Deploy
 
+The **Workers Free plan is enough**. Durable Objects with the SQLite backend
+(what `wrangler.toml` already declares via `new_sqlite_classes`) are available
+on free, and static assets are not counted against the Worker request quota.
+
 ```bash
-npx wrangler login           # opens the browser, one time
+npx wrangler login           # free Cloudflare account, one time
 npm run worker:check         # dry-run bundle, validates config + DO classes
-npm run worker:deploy
+npm run worker:deploy        # creates https://<worker>.<subdomain>.workers.dev
 ```
 
-Then attach a custom domain (`tile-rush.uday.live` or a `workers.dev` route) and
-point the client at it with `?api=https://<worker-host>` until the REST API is
-ported. CORS/cookies stay same-origin once the Worker serves both the site and
-the API, so plan the cutover around the custom domain rather than a temporary
-cross-origin URL.
+Free-tier limits that matter here:
 
-Requirements and limits to know before the cutover:
+| Resource | Free allowance | What it means for TILE RUSH |
+| --- | --- | --- |
+| Worker requests | 100,000 / day | API proxy + queue polls; static files are free |
+| Worker CPU | 10 ms / invocation | the router and DO handlers are far below this |
+| DO requests | 100,000 / day | incoming WebSocket messages bill at 20:1 |
+| DO duration | 13,000 GB-s / day | hibernation makes idle matches free |
+| SQLite rows | 5M read / 100k written per day | writes happen on join/ready/finish, not progress |
+| DO storage | 1 GB per object, 5 GB total | match state is a few KB |
 
-- Durable Objects need the **Workers Paid** plan. The free plan runs the Worker
-  but not the DO bindings.
-- The Worker is stateless for accounts; sessions and runs still live in Neon
-  until phase 2.
-- `API_ORIGIN` in `wrangler.toml` points at the current Vercel deployment. Update
-  it if the domain changes.
+A 60-second match with two players costs roughly 150 WebSocket messages and
+about 8 GB-s of active time, so one free account covers hundreds of matches a
+day. Exceeding a free limit fails the operation; it never produces a bill.
+
+`uday.live` is on Vercel DNS, not Cloudflare, so attach a `workers.dev` hostname
+rather than a subdomain of `uday.live`. Keep the REST API on Vercel, mint a
+short-lived signed match ticket there (`POST /api/match/ticket`) and pass it to
+the Worker — cookies cannot cross to a different hostname.
+
+The Worker is stateless for accounts; sessions and runs still live in Neon until
+phase 2. `API_ORIGIN` in `wrangler.toml` points at the current Vercel
+deployment; update it if the domain changes.
 
 ## Realtime protocol
 
