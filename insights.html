@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070d" />
+  <title>TILE RUSH — insights</title>
+  <meta name="description" content="Your TILE RUSH reaction times by day and hour, next to your Ultrahuman ring metrics." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/health.css" />
+</head>
+<body class="health-page">
+  <main class="health">
+    <header class="health-head">
+      <nav class="health-nav"><a class="health-back" href="./">← TILE RUSH</a><a class="health-back" href="health.html">RING METRICS →</a></nav>
+      <h1>Insights</h1>
+      <p class="health-sub">Your reaction time by day and hour, next to the ring's numbers for that day.</p>
+    </header>
+
+    <section class="in-callout" id="lastDay" hidden aria-live="polite"></section>
+
+    <div class="in-tabs" role="tablist" aria-label="Period">
+      <button type="button" role="tab" id="tabWeek" aria-selected="true">Week</button>
+      <button type="button" role="tab" id="tabMonth" aria-selected="false">Month</button>
+    </div>
+
+    <section class="in-cal" id="period" aria-labelledby="periodTitle">
+      <header class="in-cal-head">
+        <button type="button" class="in-cal-nav" id="periodPrev" aria-label="Previous">‹</button>
+        <h2 id="periodTitle"></h2>
+        <button type="button" class="in-cal-nav" id="periodNext" aria-label="Next">›</button>
+      </header>
+      <p class="health-status" id="insightsStatus" role="status">Loading…</p>
+      <div id="periodBody" hidden>
+        <div class="hm-grid" id="periodTiles"></div>
+        <p class="in-ring in-period-ring" id="periodRing"></p>
+
+        <div class="in-cal-grid" id="calGrid"></div>
+        <p class="in-cal-legend"><span>Slower than usual</span><i></i><span>Faster</span><span class="in-cal-key">▲ got faster during the day · ▼ got slower</span></p>
+
+        <div class="in-period-extra">
+          <div class="in-block" id="hoursBlock">
+            <h3>Best time of day</h3>
+            <p class="hm-note">Average reaction time for runs started in each hour. Lower is faster; your fastest hour is outlined.</p>
+            <div class="in-hours" id="insightsHours"></div>
+          </div>
+          <div class="in-block" id="hurtBlock">
+            <h3>What held you back most</h3>
+            <p class="hm-note">Days where each factor was worse than your usual.</p>
+            <ul class="in-hurt" id="periodHurt"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="in-days" id="insightsDays"></div>
+  </main>
+
+  <script src="js/insights.js"></script>
+  <script src="js/assistant.js"></script>
+</body>
+</html>

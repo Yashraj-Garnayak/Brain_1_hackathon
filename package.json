@@ -4,7 +4,9 @@
   "private": true,
   "description": "Adaptive 3x3 reflex trainer with accounts and a global leaderboard",
   "scripts": {
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "seed": "node --env-file=.env.local scripts/seed-insights.mjs",
+    "dev": "node --env-file=.env.local scripts/dev.mjs"
   },
   "dependencies": {
     "pg": "^8.16.3"

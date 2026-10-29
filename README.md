@@ -9,7 +9,9 @@ The game itself is plain HTML/CSS/JS with no build step. Accounts, sessions and 
 ```bash
 npm install
 npm run migrate      # applies db/schema.sql to DATABASE_URL_UNPOOLED
-npx vercel dev       # serves the site and /api on http://localhost:3000
+npm run dev          # vercel dev with .env.local loaded; serves the site and /api on http://localhost:3000
+npm run seed -- <username>          # sync 30 days of Ultrahuman data + seed demo runs from it
+npm run seed -- <username> --clear  # remove the seeded demo runs
 ```
 
 `npm run migrate` reads `DATABASE_URL_UNPOOLED` (falling back to `DATABASE_URL`). Locally those come from `.env.local`, which is created by `vercel env pull` after the Neon integration is connected.
@@ -110,6 +112,7 @@ delta    = clamp(K × (actual − expected), −60, +60)
 | `GET` | `/api/auth/me` | Current account (or `null`) and touch `last_seen` |
 | `POST` | `/api/runs` | Submit a ranked run; returns the authoritative rating |
 | `GET` | `/api/leaderboard?by=score\|rating&limit=50` | Ranked players, your rank, players and online totals |
+| `GET` | `/api/insights?from=…&to=…&today=…&last=1` | One week or month of runs with Ultrahuman ring metrics, period summary, what hurt, best hours; `last=1` adds the last played day |
 
 ## Tuning
 
@@ -125,14 +128,21 @@ js/audio.js        WebAudio sequencer + SFX
 js/background.js   canvas backdrop
 js/account.js      session + leaderboard client
 js/game.js         state machine, adaptive director, scoring, Elo, UI
+health.html        ring metrics page (js/health.js)
+insights.html      runs vs. ring insights page (js/insights.js)
+js/assistant.js    built-in insights helper (rule-based, no AI or network)
+css/health.css     styles for both pages
 api/auth/*.js      register / login / logout / me
 api/runs.js        ranked run submission
 api/leaderboard.js score + rating boards
+api/insights.js    per-day performance vs. ring metrics
+lib/insights.js    run detail capture + insight queries
+lib/ultrahuman.js  Ultrahuman fetch and day/moment summaries
 lib/auth.js        scrypt, cookies, sessions
 lib/db.js          pooled Neon connection
 lib/elo.js         server-side Elo
 lib/http.js        JSON/body/error helpers
 lib/users.js       account + leaderboard queries
-db/schema.sql      users / sessions / runs
+db/schema.sql      users / sessions / runs / run_details / health_days
 scripts/migrate.mjs migration runner
 ```

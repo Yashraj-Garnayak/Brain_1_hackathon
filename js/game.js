@@ -98,7 +98,7 @@
     finalCycles: $('finalCycles'), finalStreak: $('finalStreak'),
     eloBefore: $('eloBefore'), eloAfter: $('eloAfter'), eloDelta: $('eloDelta'), rankPill: $('rankPill'),
     overNote: $('overNote'), newBest: $('newBest'), againBtn: $('againBtn'), homeBtn: $('homeBtn'),
-    overBoardBtn: $('overBoardBtn'),
+    overBoardBtn: $('overBoardBtn'), overInsightsBtn: $('overInsightsBtn'),
     accountBtn: $('accountBtn'), accountAvatar: $('accountAvatar'), accountName: $('accountName'),
     authScreen: $('authScreen'), authClose: $('authClose'), authTitle: $('authTitle'), authLede: $('authLede'),
     authForm: $('authForm'), authUser: $('authUser'), authPass: $('authPass'),
@@ -128,7 +128,7 @@
     timeLeft: CONFIG.startTime,
     score: 0, tier: 0, cycleCount: 0, cycleProgress: 0,
     cycleStart: null, pressure: 0.08,
-    correct: 0, wrong: 0, misses: 0, rtSum: 0, rtCount: 0,
+    correct: 0, wrong: 0, misses: 0, rtSum: 0, rtCount: 0, rts: [],
     streak: 0, bestStreak: 0,
     goal: null, goalIndex: -1, layout: null,
     roundStart: 0, lockUntil: Infinity, resolving: false,
@@ -279,6 +279,7 @@
     G.correct++;
     G.rtSum += rt;
     G.rtCount++;
+    G.rts.push(Math.round(rt));
     G.streak++;
     if (G.streak > G.bestStreak) G.bestStreak = G.streak;
     var speed = clamp((1600 - rt) / 1300, 0, 1);
@@ -436,7 +437,12 @@
     refreshMeta();
     showScreen(el.overScreen);
     backdrop.pulse(1.4);
-    submitRun(G.score, G.tier, acc, rt, G.runId);
+    submitRun({
+      score: G.score, tier: G.tier, accuracy: acc, avgRt: rt,
+      correct: G.correct, wrong: G.wrong, misses: G.misses,
+      bestStreak: G.bestStreak, cycles: G.cycleCount, rts: G.rts.slice(),
+      tzOffset: new Date().getTimezoneOffset()
+    }, G.runId);
   }
 
   /* ---------- run lifecycle ---------- */
@@ -449,7 +455,7 @@
     G.timeLeft = CONFIG.startTime;
     G.score = 0; G.tier = 0; G.cycleCount = 0; G.cycleProgress = 0;
     G.cycleStart = null; G.pressure = 0.08;
-    G.correct = 0; G.wrong = 0; G.misses = 0; G.rtSum = 0; G.rtCount = 0;
+    G.correct = 0; G.wrong = 0; G.misses = 0; G.rtSum = 0; G.rtCount = 0; G.rts = [];
     G.streak = 0; G.bestStreak = 0;
     G.goal = null; G.goalIndex = -1; G.layout = null;
     G.lastShape = null; G.lastTickSecond = 99;
@@ -1014,9 +1020,11 @@
     });
   }
 
-  function submitRun(score, tier, accuracy, avgRt, runId) {
+  var pendingSubmit = null;
+
+  function submitRun(run, runId) {
     if (!Account || !Account.user()) return;
-    Account.submitRun({ score: score, tier: tier, accuracy: accuracy, avgRt: avgRt }).then(function (data) {
+    var submit = pendingSubmit = Account.submitRun(run).then(function (data) {
       syncSaveFromUser(data.user);
       if (G.runId === runId && G.state === 'over') {
         var rank = rankOf(data.run.after);
@@ -1031,6 +1039,8 @@
       loadGlobalCard();
     }).catch(function (err) {
       if (err && err.status === 401 && Account) Account.refresh();
+    }).then(function () {
+      if (pendingSubmit === submit) pendingSubmit = null;
     });
   }
 
@@ -1061,6 +1071,15 @@
   el.againBtn.addEventListener('click', requestStart);
   el.homeBtn.addEventListener('click', toMenu);
   el.overBoardBtn.addEventListener('click', function () { openBoard('score'); });
+  if (window.location.search) el.overInsightsBtn.href = 'insights.html' + window.location.search;
+  // Leaving mid-submit would cancel the request, so let the run save first.
+  el.overInsightsBtn.addEventListener('click', function (e) {
+    if (!pendingSubmit) return;
+    e.preventDefault();
+    var href = el.overInsightsBtn.href;
+    el.overInsightsBtn.textContent = 'SAVING…';
+    pendingSubmit.then(function () { window.location.href = href; });
+  });
   el.muteBtn.addEventListener('click', toggleMute);
   el.musicToggle.addEventListener('click', toggleMute);
   el.motionToggle.addEventListener('click', toggleMotion);

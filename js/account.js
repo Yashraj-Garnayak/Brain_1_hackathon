@@ -92,12 +92,22 @@
           score: run.score,
           tier: run.tier,
           accuracy: run.accuracy,
-          avgRt: run.avgRt
+          avgRt: run.avgRt,
+          correct: run.correct,
+          wrong: run.wrong,
+          misses: run.misses,
+          bestStreak: run.bestStreak,
+          cycles: run.cycles,
+          rts: run.rts,
+          tzOffset: run.tzOffset
         }
       }).then(function (data) {
         if (data.user) setUser(data.user);
         return data;
       });
+    },
+    insights: function (days) {
+      return request('/api/insights?days=' + (days || 30));
     },
     leaderboard: function (by, limit) {
       return request('/api/leaderboard?by=' + encodeURIComponent(by || 'score') + '&limit=' + (limit || 50));
