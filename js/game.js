@@ -4,6 +4,7 @@
 
   var TS = window.TILE_SHAPES;
   var SHAPES = TS.SHAPES, SHAPE_LIST = TS.SHAPE_LIST, PALETTE = TS.PALETTE, shapeSvg = TS.shapeSvg;
+  var BPI = window.BPI;
   var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
   var lerp = function (a, b, t) { return a + (b - a) * t; };
   var rand = function (n) { return Math.floor(Math.random() * n); };
@@ -12,16 +13,13 @@
   var fmt = function (n) { return Math.round(n).toLocaleString('en-US'); };
 
   var CONFIG = {
-    startTime: 30,
-    maxTime: 45,
     countdownMs: 3000,
-    cycleLength: 10,
-    cyclePar: 8.6,
-    bonusBase: 1.1,
-    bonusGain: 1.2,
-    maxBonus: 9,
-    churnSlow: 3000,
-    churnFast: 1100,
+    rounds: [
+      { size: 3, duration: 25, churn: 2500, cycle: 10 },
+      { size: 4, duration: 15, churn: 2000, cycle: 8 },
+      { size: 5, duration: 10, churn: 1500, cycle: 6 }
+    ],
+    breakMs: 5000,
     wrongPenalty: 1.0,
     wrongScore: 30,
     basePoints: 100
@@ -33,6 +31,7 @@
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       elo: 1000, games: 0, best: 0, bestTier: 0, bestStreak: 0,
+      bestBpi: 0, title: 'DRIFTER',
       runs: [], symbols: {},
       settings: { muted: false, motion: !reduced }
     };
@@ -48,6 +47,8 @@
       base.best = Number(d.best) || 0;
       base.bestTier = Number(d.bestTier) || 0;
       base.bestStreak = Number(d.bestStreak) || 0;
+      base.bestBpi = Number(d.bestBpi) || 0;
+      base.title = d.title || 'DRIFTER';
       base.runs = Array.isArray(d.runs) ? d.runs.slice(0, 12) : [];
       base.symbols = d.symbols && typeof d.symbols === 'object' ? d.symbols : {};
       if (d.settings) {
@@ -80,21 +81,27 @@
   var el = {
     grid: $('grid'), fx: $('fx'), toast: $('toast'), goFlash: $('goFlash'),
     countdown: $('countdown'), countdownNum: $('countdownNum'),
+    roundBreak: $('roundBreak'), breakTitle: $('breakTitle'), breakSub: $('breakSub'),
+    breakNext: $('breakNext'), breakNum: $('breakNum'),
     timebar: document.querySelector('.timebar'), timebarFill: $('timebarFill'),
     clock: $('clock'), timeValue: $('timeValue'),
     score: $('score'), eloValue: $('eloValue'), eloRank: $('eloRank'), rankDot: $('rankDot'),
     muteBtn: $('muteBtn'), muteIcon: $('muteIcon'),
     goalCard: $('goalCard'), goalIcon: $('goalIcon'), goalTrack: $('goalTrack'), goalTrackFill: $('goalTrackFill'),
     churnValue: $('churnValue'), churnWrap: $('churnValue').parentElement,
-    cycleNum: $('cycleNum'), tier: $('tier'), pips: $('pips'),
+    round: $('round'), cycleNum: $('cycleNum'), tier: $('tier'), pips: $('pips'),
     streak: $('streak'), streakWrap: $('streakWrap'),
     pressureFill: $('pressureFill'), pressureLabel: $('pressureLabel'), pressurePct: $('pressurePct'),
     statAcc: $('statAcc'), statRt: $('statRt'), statStreak: $('statStreak'),
     weakRow: $('weakRow'), runs: $('runs'), gamesCount: $('gamesCount'), bestScore: $('bestScore'),
     musicToggle: $('musicToggle'), motionToggle: $('motionToggle'),
-    introScreen: $('introScreen'), introBest: $('introBest'), introElo: $('introElo'), introGames: $('introGames'),
+    introScreen: $('introScreen'), introBest: $('introBest'), introBpi: $('introBpi'),
+    introTitle: $('introTitle'), introElo: $('introElo'), introGames: $('introGames'),
     startBtn: $('startBtn'), resetBtn: $('resetBtn'),
-    overScreen: $('overScreen'), finalScore: $('finalScore'), finalAcc: $('finalAcc'), finalRt: $('finalRt'),
+    overScreen: $('overScreen'), overKicker: $('overKicker'), finalScore: $('finalScore'),
+    finalAcc: $('finalAcc'), finalRt: $('finalRt'), finalBpi: $('finalBpi'),
+    finalTitle: $('finalTitle'), finalArchetype: $('finalArchetype'),
+    overFeedback: $('overFeedback'), overRadar: $('overRadar'),
     finalCycles: $('finalCycles'), finalStreak: $('finalStreak'),
     eloBefore: $('eloBefore'), eloAfter: $('eloAfter'), eloDelta: $('eloDelta'), rankPill: $('rankPill'),
     overNote: $('overNote'), newBest: $('newBest'), againBtn: $('againBtn'), homeBtn: $('homeBtn'),
@@ -107,15 +114,35 @@
     boardScreen: $('boardScreen'), boardClose: $('boardClose'), boardList: $('boardList'),
     boardPlayers: $('boardPlayers'), boardOnline: $('boardOnline'), boardMe: $('boardMe'),
     boardIdentity: $('boardIdentity'), boardLogout: $('boardLogout'), boardTitle: $('boardTitle'),
-    introBoardBtn: $('introBoardBtn'), panelBoardBtn: $('panelBoardBtn'), globalTop: $('globalTop')
+    boardScopeLabel: $('boardScopeLabel'), boardPeriodLabel: $('boardPeriodLabel'),
+    boardScopes: $('boardScopes'), boardPeriods: $('boardPeriods'), boardMetrics: $('boardMetrics'),
+    introBoardBtn: $('introBoardBtn'), panelBoardBtn: $('panelBoardBtn'), globalTop: $('globalTop'),
+    profileScreen: $('profileScreen'), profileClose: $('profileClose'), profileBoardBtn: $('profileBoardBtn'),
+    profileAvatar: $('profileAvatar'), profileName: $('profileName'), profileMeta: $('profileMeta'),
+    profileTitle: $('profileTitle'), profileArchetype: $('profileArchetype'), profileOnline: $('profileOnline'),
+    profileBestBpi: $('profileBestBpi'), profileBestScore: $('profileBestScore'),
+    profileGames: $('profileGames'), profileRank: $('profileRank'),
+    profileGameSelect: $('profileGameSelect'), profileSeasonName: $('profileSeasonName'),
+    profileSeasonStats: $('profileSeasonStats'), profileSeasons: $('profileSeasons'),
+    profileRadar: $('profileRadar'), profileFeedback: $('profileFeedback'),
+    profileImprove: $('profileImprove'), profileImproveList: $('profileImproveList'),
+    profileEdit: $('profileEdit'), avatarBtn: $('avatarBtn'), avatarInput: $('avatarInput'),
+    avatarHint: $('avatarHint')
   };
 
   var Account = window.Account;
   var authMode = 'login';
   var pendingStart = false;
   var guestMode = false;
-  var boardSort = 'score';
+  var boardBy = 'bpi';
+  var boardScope = 'global';
+  var boardPeriod = 'season';
   var boardRequest = 0;
+  var profileRequest = 0;
+  var profileReturn = null;
+  var currentProfile = null;
+  var currentProfileGame = 'tile-rush';
+  var currentProfileSelf = false;
 
   var audio = new window.AudioEngine();
   var backdrop = new window.Backdrop($('backdrop'));
@@ -125,18 +152,56 @@
   var G = {
     state: 'intro',
     runId: 0,
-    timeLeft: CONFIG.startTime,
-    score: 0, tier: 0, cycleCount: 0, cycleProgress: 0,
+    round: 0,
+    roundId: 0,
+    size: 3,
+    timeLeft: 25,
+    roundDuration: 25,
+    roundChurn: 2500,
+    cycleTarget: 10,
+    score: 0, tier: 0, maxTier: 0, cycleCount: 0, cycleProgress: 0,
     cycleStart: null, pressure: 0.08,
-    correct: 0, wrong: 0, misses: 0, rtSum: 0, rtCount: 0, rts: [],
+    correct: 0, wrong: 0, misses: 0, rtSum: 0, rtCount: 0,
     streak: 0, bestStreak: 0,
     goal: null, goalIndex: -1, layout: null,
     roundStart: 0, lockUntil: Infinity, resolving: false,
-    churnStart: 0, churnDuration: CONFIG.churnSlow, churnDeadline: 0,
-    lastShape: null, lastTickSecond: 99, countdownEnd: 0, countdownNum: 0,
+    churnStart: 0, churnDuration: 2500, churnDeadline: 0,
+    lastShape: null, lastGoalColor: null, colorChanged: false, near: 0,
+    wrongOnBoard: 0, lastTickSecond: 99, countdownEnd: 0, countdownNum: 0,
+    breakEnd: 0, breakNum: 0,
+    trials: [], roundStats: [], roundBase: null, finalMetrics: null,
     runSymbols: {}, lastFrame: 0, lastAudio: 0, pressureLabel: '',
-    eloBefore: SAVE.elo, eloDelta: 0
+    eloBefore: SAVE.elo, eloDelta: 0,
+    duel: false, duelSeed: '', duelDeal: 0, duelOpp: null, duelLastSent: 0,
+    timeline: [], runStartedAt: 0, timelineNext: 0
   };
+
+  /* ---------- deterministic boards for 1v1 ---------- */
+  /* Board generation is normally adaptive. In a duel both players must face the
+     same ordered sequence, so each board is generated from (seed, round, index)
+     instead of local history. */
+  function hashSeed(text) {
+    var h = 1779033703 ^ text.length;
+    for (var i = 0; i < text.length; i++) {
+      h = Math.imul(h ^ text.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return h >>> 0;
+  }
+  function seededRandom(text) {
+    var a = hashSeed(String(text));
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function duelHook(name, data) {
+    var duel = window.Duel;
+    if (!duel || typeof duel[name] !== 'function') return;
+    try { duel[name](data); } catch (e) { /* never break the run */ }
+  }
 
   /* ---------- persistence helpers ---------- */
   function runStats(id) { return G.runSymbols[id] || (G.runSymbols[id] = zeroStats()); }
@@ -152,7 +217,8 @@
     var spd = clamp((1800 - rt) / 1500, 0, 1);
     return clamp(acc * 0.62 + spd * 0.38, 0, 1);
   }
-  function pickGoalShape() {
+  function pickGoalShape(random) {
+    var roll = random || Math.random;
     var weights = [], total = 0;
     for (var i = 0; i < SHAPE_LIST.length; i++) {
       var s = mergedStats(SHAPE_LIST[i].id);
@@ -163,7 +229,7 @@
       weights.push(w);
       total += w;
     }
-    var r = Math.random() * total;
+    var r = roll() * total;
     for (var j = 0; j < SHAPE_LIST.length; j++) {
       r -= weights[j];
       if (r <= 0) return SHAPE_LIST[j];
@@ -172,18 +238,25 @@
   }
 
   /* ---------- game state ---------- */
-  function churnMs() {
-    return Math.max(950, lerp(CONFIG.churnSlow, CONFIG.churnFast, G.pressure));
+  function currentChurn() {
+    return G.roundChurn || 2500;
   }
 
   function deal() {
     if (G.state !== 'playing' && G.state !== 'countdown' && G.state !== 'warmup') return;
     var t = now();
-    var goalShape = pickGoalShape();
-    var goalColor = pick(PALETTE);
+    var duelRng = G.duel ? seededRandom(G.duelSeed + ':' + G.round + ':' + (G.duelDeal++)) : null;
+    var random = duelRng || Math.random;
+    var rPick = function (list) { return list[Math.floor(random() * list.length)]; };
+    var rRand = function (n) { return Math.floor(random() * n); };
+    var goalShape = G.duel ? rPick(SHAPE_LIST) : pickGoalShape();
+    var goalColor = G.duel ? rPick(PALETTE) : pick(PALETTE);
     var goal = { shape: goalShape, color: goalColor, key: goalShape.id + '|' + goalColor.id };
-    var near = clamp(0.05 + G.pressure * 0.62 + G.tier * 0.02, 0, 0.8);
-    var used = {}, cells = new Array(9), goalIndex = rand(9);
+    var near = G.duel
+      ? clamp(0.06 + (G.size - 3) * 0.1 + Math.min(G.duelDeal, 40) * 0.009, 0, 0.62)
+      : clamp(0.05 + G.pressure * 0.5 + G.tier * 0.025 + (G.size - 3) * 0.08, 0, 0.82);
+    var n = G.size * G.size;
+    var used = {}, cells = new Array(n), goalIndex = rRand(n);
     used[goal.key] = true;
     cells[goalIndex] = goal;
 
@@ -198,29 +271,29 @@
       }
     }
     function decoyColor() {
-      if (Math.random() < 0.5) {
+      if (random() < 0.5) {
         var pool = PALETTE.filter(function (c) { return c.group === goalColor.group; });
-        return pick(pool);
+        return rPick(pool);
       }
-      return pick(PALETTE);
+      return rPick(PALETTE);
     }
 
-    for (var i = 0; i < 9; i++) {
+    for (var i = 0; i < n; i++) {
       if (i === goalIndex) continue;
       var cell = null;
       for (var attempt = 0; attempt < 26 && !cell; attempt++) {
         var shape, color;
-        if (Math.random() < near) {
-          if (family.length && Math.random() < 0.58) {
-            shape = pick(family);
-            color = Math.random() < 0.4 ? goalColor : decoyColor();
+        if (random() < near) {
+          if (family.length && random() < 0.58) {
+            shape = rPick(family);
+            color = random() < 0.4 ? goalColor : decoyColor();
           } else {
-            shape = Math.random() < 0.22 ? goalShape : pick(SHAPE_LIST);
+            shape = random() < 0.22 ? goalShape : rPick(SHAPE_LIST);
             color = decoyColor();
           }
         } else {
-          shape = pick(SHAPE_LIST);
-          color = pick(PALETTE);
+          shape = rPick(SHAPE_LIST);
+          color = rPick(PALETTE);
         }
         var key = shape.id + '|' + color.id;
         if (!used[key]) { used[key] = true; cell = { shape: shape, color: color, key: key }; }
@@ -233,18 +306,18 @@
       cells[i] = cell || { shape: goalShape, color: goalColor, key: goal.key + '|x' };
     }
 
-    for (var n = 0; n < 9; n++) {
-      var tile = tiles[n], cell2 = cells[n];
+    for (var n2 = 0; n2 < n; n2++) {
+      var tile = tiles[n2], cell2 = cells[n2];
       tile.dataset.key = cell2.key;
-      tile.dataset.index = n;
+      tile.dataset.index = n2;
       tile.className = 'tile';
       tile.style.setProperty('--tint', cell2.color.hex);
       tile.innerHTML = shapeSvg(cell2.shape, cell2.color);
-      tile.setAttribute('aria-label', 'Tile ' + (n + 1) + ': ' + cell2.color.id + ' ' + cell2.shape.id);
+      tile.setAttribute('aria-label', 'Tile ' + (n2 + 1) + ': ' + cell2.color.id + ' ' + cell2.shape.id);
       void tile.offsetWidth;
       tile.classList.add('deal');
       var glyph = tile.firstElementChild;
-      if (glyph) glyph.style.animationDelay = (n % 3 + Math.floor(n / 3)) * 16 + 'ms';
+      if (glyph) glyph.style.animationDelay = ((n2 % G.size) + Math.floor(n2 / G.size)) * 14 + 'ms';
     }
     var runId = G.runId;
     setTimeout(function () {
@@ -258,9 +331,13 @@
     G.resolving = false;
     G.roundStart = t;
     G.churnStart = t;
-    G.churnDuration = churnMs();
+    G.churnDuration = currentChurn();
     G.churnDeadline = t + G.churnDuration;
     G.lastShape = goalShape.id;
+    G.near = near;
+    G.colorChanged = G.lastGoalColor !== null && G.lastGoalColor !== goalColor.id;
+    G.lastGoalColor = goalColor.id;
+    G.wrongOnBoard = 0;
     if (G.cycleStart === null) G.cycleStart = t;
 
     el.goalIcon.innerHTML = shapeSvg(goalShape, goalColor);
@@ -270,22 +347,43 @@
     el.goalCard.style.setProperty('--tint', goalColor.hex);
     el.goalTrack.classList.remove('urgent');
     el.churnWrap.classList.remove('urgent');
+    el.churnValue.textContent = (G.churnDuration / 1000).toFixed(1);
     audio.deal();
     refreshRunHud();
   }
 
+  function logTrial(entry) {
+    if (G.trials.length >= 400) return;
+    entry.round = G.round + 1;
+    entry.size = G.size;
+    entry.tier = G.tier;
+    entry.timeLeft = Math.round(G.timeLeft * 10) / 10;
+    G.trials.push(entry);
+  }
+
   function hitTile(index, cell, t, x, y) {
-    var rt = clamp(t - G.roundStart, 50, 4000);
+    var rt = clamp(t - G.roundStart, 50, 15000);
+    logTrial({
+      rt: Math.round(rt), correct: true, near: G.near, colorChanged: G.colorChanged,
+      afterWrong: G.wrongOnBoard > 0, tapCell: index, targetCell: G.goalIndex,
+      tapKey: cell.key, targetKey: G.goal.key
+    });
     G.correct++;
     G.rtSum += rt;
     G.rtCount++;
-    G.rts.push(Math.round(rt));
     G.streak++;
     if (G.streak > G.bestStreak) G.bestStreak = G.streak;
     var speed = clamp((1600 - rt) / 1300, 0, 1);
-    var pts = Math.round(CONFIG.basePoints * (1 + speed * 0.9) * (1 + Math.min(G.streak, 20) * 0.08) * (1 + G.tier * 0.12));
+    var pts = Math.round(
+      CONFIG.basePoints *
+      (1 + speed * 0.9) *
+      (1 + Math.min(G.streak, 20) * 0.08) *
+      (1 + G.tier * 0.12) *
+      (1 + (G.size - 3) * 0.12)
+    );
     G.score += pts;
     G.pressure = clamp(G.pressure + 0.014 + speed * 0.05 + G.tier * 0.002, 0, 1);
+    G.maxTier = Math.max(G.maxTier, G.tier);
     var s = runStats(cell.shape.id);
     s.c++; s.rt += rt; s.rtc++;
 
@@ -299,16 +397,23 @@
     G.resolving = true;
     refreshRunHud();
 
-    if (G.cycleProgress >= CONFIG.cycleLength) { completeCycle(t); return; }
-    G.lockUntil = t + 130;
-    var runId = G.runId;
+    if (G.cycleProgress >= G.cycleTarget) { completeCycle(t); return; }
+    G.lockUntil = t + 100;
+    var runId = G.runId, roundId = G.roundId;
     setTimeout(function () {
-      if (G.state === 'playing' && G.runId === runId) deal();
-    }, 130);
+      if (G.state === 'playing' && G.runId === runId && G.roundId === roundId) deal();
+    }, 100);
   }
 
   function missTap(index, cell, t, x, y) {
+    var rt = clamp(t - G.roundStart, 50, 15000);
+    logTrial({
+      rt: Math.round(rt), correct: false, near: G.near, colorChanged: G.colorChanged,
+      afterWrong: G.wrongOnBoard > 0, tapCell: index, targetCell: G.goalIndex,
+      tapKey: cell.key, targetKey: G.goal.key
+    });
     G.wrong++;
+    G.wrongOnBoard++;
     G.streak = 0;
     G.score = Math.max(0, G.score - CONFIG.wrongScore);
     G.timeLeft = Math.max(0, G.timeLeft - CONFIG.wrongPenalty);
@@ -320,7 +425,7 @@
     floatText('\u2212' + CONFIG.wrongPenalty.toFixed(1) + 's', x, y, 'bad');
     audio.wrong();
     refreshRunHud();
-    if (G.timeLeft <= 0) endRun();
+    if (G.timeLeft <= 0) endRound();
   }
 
   function onChurnExpire(t) {
@@ -333,48 +438,80 @@
     var correctTile = tiles[G.goalIndex];
     if (correctTile) {
       correctTile.classList.add('reveal');
-      setTimeout(function () { correctTile.classList.remove('reveal'); }, 360);
+      setTimeout(function () { correctTile.classList.remove('reveal'); }, 340);
     }
-    G.lockUntil = t + 280;
-    var runId = G.runId;
+    G.lockUntil = t + 240;
+    var runId = G.runId, roundId = G.roundId;
     setTimeout(function () {
-      if (G.state === 'playing' && G.runId === runId) deal();
-    }, 260);
+      if (G.state === 'playing' && G.runId === runId && G.roundId === roundId) deal();
+    }, 230);
   }
 
   function completeCycle(t) {
     var elapsed = (t - (G.cycleStart || t)) / 1000;
-    var bonus = clamp((CONFIG.cyclePar - elapsed) * CONFIG.bonusGain + CONFIG.bonusBase, 0.4, CONFIG.maxBonus);
-    bonus = Math.round(bonus * 10) / 10;
-    G.timeLeft = Math.min(CONFIG.maxTime, G.timeLeft + bonus);
-    var bonusPts = 400 + Math.round(bonus * 60) + G.tier * 100;
+    var bonusPts = 400 + Math.round(Math.max(0, 4.5 - elapsed) * 35) + G.tier * 100 + (G.size - 3) * 80;
     G.score += bonusPts;
     G.tier++;
+    G.maxTier = Math.max(G.maxTier, G.tier);
     G.cycleCount++;
     G.cycleProgress = 0;
     G.cycleStart = null;
     G.resolving = true;
     G.pressure = clamp(G.pressure + 0.09, 0, 1);
-    G.lockUntil = t + 580;
+    G.lockUntil = t + 460;
     audio.cycle();
     backdrop.pulse(1.2);
-    showToast('CYCLE CLEAR', '+' + bonus.toFixed(1) + 's \u00b7 +' + fmt(bonusPts));
+    showToast('CYCLE CLEAR', '+' + fmt(bonusPts) + ' \u00b7 TIER ' + G.tier);
     clockGain();
     refreshRunHud();
     for (var i = 0; i < tiles.length; i++) {
       (function (tile, idx) {
-        setTimeout(function () { tile.classList.add('correct'); }, idx * 18);
-        setTimeout(function () { tile.classList.remove('correct'); }, 280 + idx * 18);
+        setTimeout(function () { tile.classList.add('correct'); }, idx * 14);
+        setTimeout(function () { tile.classList.remove('correct'); }, 240 + idx * 14);
       })(tiles[i], i);
     }
-    var runId = G.runId;
+    var runId = G.runId, roundId = G.roundId;
     setTimeout(function () {
-      if (G.state === 'playing' && G.runId === runId) deal();
-    }, 580);
+      if (G.state === 'playing' && G.runId === runId && G.roundId === roundId) deal();
+    }, 460);
+  }
+
+  function finishRoundStats() {
+    if (!G.roundBase) return;
+    var cfg = CONFIG.rounds[G.round];
+    G.roundStats.push({
+      round: G.round + 1,
+      size: cfg.size,
+      duration: cfg.duration,
+      score: Math.max(0, G.score - G.roundBase.score),
+      correct: G.correct - G.roundBase.correct,
+      wrong: G.wrong - G.roundBase.wrong,
+      misses: G.misses - G.roundBase.misses,
+      maxTier: G.maxTier
+    });
+    G.roundBase = null;
+  }
+
+  function endRound() {
+    if (G.state !== 'playing') return;
+    finishRoundStats();
+    if (G.round < CONFIG.rounds.length - 1) {
+      G.state = 'break';
+      G.resolving = true;
+      G.lockUntil = Infinity;
+      G.breakEnd = now() + CONFIG.breakMs;
+      G.breakNum = 0;
+      audio.stopMusic();
+      audio.cycle();
+      showRoundBreak();
+      if (G.duel) duelHook('break', { round: G.round + 1, score: G.score });
+      return;
+    }
+    endRun();
   }
 
   function endRun() {
-    if (G.state !== 'playing') return;
+    if (G.state === 'over') return;
     G.state = 'over';
     G.lockUntil = Infinity;
     G.timeLeft = Math.max(0, G.timeLeft);
@@ -385,9 +522,9 @@
     var acc = G.correct / attempts;
     var rt = G.rtCount ? G.rtSum / G.rtCount : 2000;
     var speedN = clamp((1800 - rt) / 1500, 0, 1);
-    var tierN = clamp(G.tier / 8, 0, 1);
+    var tierN = clamp(G.maxTier / 10, 0, 1);
     var actual = clamp(acc * 0.55 + speedN * 0.3 + tierN * 0.15, 0, 1);
-    var opponent = 820 + G.tier * 130;
+    var opponent = 820 + G.maxTier * 130;
     var expected = 1 / (1 + Math.pow(10, (opponent - SAVE.elo) / 400));
     var K = SAVE.games < 10 ? 44 : 28;
     var before = SAVE.elo;
@@ -402,10 +539,26 @@
     var isBest = G.score > SAVE.best;
     if (isBest) SAVE.best = G.score;
     if (G.bestStreak > SAVE.bestStreak) SAVE.bestStreak = G.bestStreak;
-    if (G.tier > SAVE.bestTier) SAVE.bestTier = G.tier;
+    if (G.maxTier > SAVE.bestTier) SAVE.bestTier = G.maxTier;
     SAVE.elo = after;
     SAVE.games++;
-    SAVE.runs.unshift({ score: G.score, tier: G.tier, acc: Math.round(acc * 100), rt: Math.round(rt) });
+
+    var metrics = BPI.compute({
+      trials: G.trials,
+      misses: G.misses,
+      cycles: G.cycleCount,
+      maxTier: G.maxTier,
+      score: G.score
+    });
+    G.finalMetrics = metrics;
+    if (metrics.bpi > SAVE.bestBpi) {
+      SAVE.bestBpi = metrics.bpi;
+      SAVE.title = metrics.title;
+    }
+    SAVE.runs.unshift({
+      score: G.score, tier: G.maxTier, acc: Math.round(acc * 100),
+      rt: Math.round(rt), bpi: metrics.bpi
+    });
     SAVE.runs = SAVE.runs.slice(0, 12);
     persist();
 
@@ -422,55 +575,95 @@
     el.rankPill.textContent = rank.name;
     el.rankPill.style.color = rank.color;
     el.newBest.classList.toggle('show', isBest && G.score > 0);
+    el.finalBpi.textContent = String(metrics.bpi);
+    el.finalTitle.textContent = metrics.title;
+    el.finalTitle.style.color = titleColor(metrics.title);
+    el.finalArchetype.textContent = metrics.archetype;
+    el.overFeedback.textContent = metrics.feedback.headline + ' ' + metrics.feedback.body;
+    el.overKicker.textContent = 'RUN COMPLETE \u00b7 ' + metrics.confidence.toUpperCase();
+    if (window.ProfileUI && el.overRadar) {
+      el.overRadar.innerHTML = window.ProfileUI.radarSVG(metrics.axes, 168);
+    }
 
-    var note;
-    if (acc < 0.62) note = 'Accuracy is leaking seconds. Scan first, commit once.';
-    else if (rt > 1250) note = 'You are reading the board late. Lock onto the target before sweeping.';
-    else if (G.tier < 2) note = 'Clean but short. Push cycle time down to grow the bonus bank.';
-    else if (delta >= 8) note = 'The director is feeding your weak shapes. Keep the streak alive.';
-    else note = 'Solid run. The next tier comes with tighter decoys and a faster clock.';
-    el.overNote.textContent = note;
-
+    el.overNote.textContent = metrics.feedback.drill || '';
     el.timeValue.textContent = '0.0';
     el.timebarFill.style.transform = 'scaleX(0)';
     refreshRunHud();
     refreshMeta();
     showScreen(el.overScreen);
     backdrop.pulse(1.4);
+    if (G.duel) duelHook('finish', { score: G.score, bpi: metrics.bpi });
+
+    /* Close the trace on the final score and stop sampling. */
+    if (G.timeline.length) G.timeline[G.timeline.length - 1] = G.score;
+    G.runStartedAt = 0;
+
     submitRun({
-      score: G.score, tier: G.tier, accuracy: acc, avgRt: rt,
-      correct: G.correct, wrong: G.wrong, misses: G.misses,
-      bestStreak: G.bestStreak, cycles: G.cycleCount, rts: G.rts.slice(),
+      score: G.score,
+      tier: G.maxTier,
+      accuracy: acc,
+      avgRt: Math.round(rt),
+      misses: G.misses,
+      cycles: G.cycleCount,
+      rounds: G.roundStats,
+      trials: G.trials,
+      timeline: G.timeline,
+      gameId: 'tile-rush',
+      bestStreak: G.bestStreak,
       tzOffset: new Date().getTimezoneOffset()
     }, G.runId);
   }
 
   /* ---------- run lifecycle ---------- */
+  function resetRunCounters() {
+    G.score = 0; G.tier = 0; G.maxTier = 0; G.cycleCount = 0; G.cycleProgress = 0;
+    G.cycleStart = null; G.pressure = 0.08;
+    G.correct = 0; G.wrong = 0; G.misses = 0; G.rtSum = 0; G.rtCount = 0;
+    G.streak = 0; G.bestStreak = 0;
+    G.goal = null; G.goalIndex = -1; G.layout = null;
+    G.lastShape = null; G.lastGoalColor = null; G.colorChanged = false;
+    G.wrongOnBoard = 0; G.trials = []; G.roundStats = []; G.roundBase = null;
+    G.finalMetrics = null;
+    G.runSymbols = {};
+    G.lockUntil = Infinity;
+    G.resolving = false;
+    G.duelDeal = 0;
+    G.duelLastSent = 0;
+    G.timeline = [];
+    G.runStartedAt = 0;
+    G.timelineNext = 0;
+  }
+
   function startRun() {
     audio.init();
     audio.setMuted(SAVE.settings.muted);
 
     G.runId++;
     G.state = 'countdown';
-    G.timeLeft = CONFIG.startTime;
-    G.score = 0; G.tier = 0; G.cycleCount = 0; G.cycleProgress = 0;
-    G.cycleStart = null; G.pressure = 0.08;
-    G.correct = 0; G.wrong = 0; G.misses = 0; G.rtSum = 0; G.rtCount = 0; G.rts = [];
-    G.streak = 0; G.bestStreak = 0;
-    G.goal = null; G.goalIndex = -1; G.layout = null;
-    G.lastShape = null; G.lastTickSecond = 99;
-    G.runSymbols = {};
-    G.lockUntil = Infinity;
-    G.resolving = false;
+    G.round = 0;
+    G.roundId++;
+    G.size = CONFIG.rounds[0].size;
+    G.roundDuration = CONFIG.rounds[0].duration;
+    G.roundChurn = CONFIG.rounds[0].churn;
+    G.cycleTarget = CONFIG.rounds[0].cycle;
+    G.timeLeft = G.roundDuration;
+    resetRunCounters();
+    G.roundBase = { score: 0, correct: 0, wrong: 0, misses: 0, tier: 0 };
     G.lastFrame = now();
-    G.pressureLabel = '';
     G.eloBefore = SAVE.elo;
     G.countdownNum = 0;
 
+    /* One cumulative-score sample per second, from the countdown onward, so the
+       run can be replayed as a ghost later. */
+    G.runStartedAt = G.lastFrame;
+    G.timeline = [0];
+    G.timelineNext = 1000;
+
     showScreen(null);
+    buildGrid(G.size);
     el.clock.classList.remove('warn', 'danger', 'gain');
     el.timebar.classList.remove('warn', 'danger');
-    el.timeValue.textContent = CONFIG.startTime.toFixed(1);
+    el.timeValue.textContent = G.roundDuration.toFixed(1);
     el.timebarFill.style.transform = 'scaleX(1)';
 
     /* Deal once, before the countdown, and carry that exact board into play. */
@@ -478,7 +671,7 @@
     G.cycleStart = null;
     el.goalCard.classList.add('locked');
     G.countdownEnd = now() + CONFIG.countdownMs;
-    el.churnValue.textContent = (G.churnDuration / 1000).toFixed(1);
+    el.churnValue.textContent = (G.roundChurn / 1000).toFixed(1);
     el.churnWrap.classList.remove('urgent');
     el.goalTrack.classList.remove('urgent');
     el.goalTrackFill.style.transform = 'scaleX(1)';
@@ -501,14 +694,75 @@
     G.roundStart = t;
     G.cycleStart = t;
     G.churnStart = t;
-    G.churnDuration = churnMs();
+    G.churnDuration = G.roundChurn;
     G.churnDeadline = t + G.churnDuration;
     G.resolving = false;
     el.goalCard.classList.remove('locked');
     hideCountdown();
-    flashGo('GO');
+    hideRoundBreak();
+    flashGo('ROUND 1');
     audio.startMusic();
     audio.start();
+    refreshRunHud();
+  }
+
+  function enterRound(index) {
+    var cfg = CONFIG.rounds[index];
+    G.roundId++;
+    G.round = index;
+    G.size = cfg.size;
+    G.roundDuration = cfg.duration;
+    G.roundChurn = cfg.churn;
+    G.cycleTarget = cfg.cycle;
+    G.timeLeft = cfg.duration;
+    G.cycleProgress = 0;
+    G.cycleStart = null;
+    G.roundBase = { score: G.score, correct: G.correct, wrong: G.wrong, misses: G.misses, tier: G.tier };
+    G.lastGoalColor = null;
+    G.wrongOnBoard = 0;
+    G.pressure = clamp(0.12 + index * 0.12, 0, 1);
+    G.resolving = false;
+    G.lockUntil = 0;
+    G.lastTickSecond = 99;
+
+    buildGrid(cfg.size);
+    hideRoundBreak();
+    showScreen(null);
+    G.state = 'playing';
+    var t = now();
+    G.lastFrame = t;
+    G.roundStart = t;
+    G.churnStart = t;
+    G.churnDuration = G.roundChurn;
+    G.churnDeadline = t + G.churnDuration;
+    G.cycleStart = null;
+    deal();
+    flashGo('ROUND ' + (index + 1));
+    audio.startMusic();
+    audio.start();
+    el.goalCard.classList.remove('locked');
+    el.grid.classList.remove('break');
+    refreshRunHud();
+    if (G.duel) duelHook('round', { round: index + 1 });
+  }
+
+  function showRoundBreak() {
+    var cfg = CONFIG.rounds[G.round];
+    var next = CONFIG.rounds[G.round + 1];
+    el.breakTitle.textContent = 'ROUND ' + (G.round + 1) + ' CLEAR';
+    el.breakSub.textContent = cfg.size + '×' + cfg.size + ' · ' + cfg.duration + 's · ' + G.correct + ' hits';
+    el.breakNext.textContent = 'NEXT ' + next.size + '×' + next.size + ' · ' + next.duration + 's';
+    el.breakNum.textContent = '5';
+    el.roundBreak.classList.add('show');
+    el.grid.classList.add('break');
+    el.goalCard.classList.add('locked');
+    G.breakNum = 5;
+    audio.countdown(5);
+  }
+
+  function hideRoundBreak() {
+    el.roundBreak.classList.remove('show');
+    el.grid.classList.remove('break');
   }
 
   function setCountdown(n) {
@@ -531,10 +785,16 @@
   function toMenu() {
     G.state = 'intro';
     G.runId++;
-    audio.stopMusic();
+    G.roundId++;
+    G.duel = false;
+    G.duelSeed = '';
+    G.duelOpp = null;
+    hideRoundBreak();
+    hideCountdown();
     showScreen(el.introScreen);
     showIdle();
     refreshMeta();
+    duelHook('closed');
   }
 
   /* ---------- input ---------- */
@@ -559,10 +819,14 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
+      if (el.profileScreen.classList.contains('show')) { closeProfile(); return; }
       if (el.authScreen.classList.contains('show')) { closeAuth(); return; }
       if (el.boardScreen.classList.contains('show')) { closeBoard(); return; }
     }
-    if (el.authScreen.classList.contains('show') || el.boardScreen.classList.contains('show')) return;
+    if (e.target && /^(input|select|textarea)$/i.test(e.target.tagName)) return;
+    if (el.profileScreen.classList.contains('show') ||
+        el.authScreen.classList.contains('show') ||
+        el.boardScreen.classList.contains('show')) return;
     if (e.key === 'Enter') {
       if (G.state === 'intro' || G.state === 'over') { e.preventDefault(); requestStart(); }
       return;
@@ -576,6 +840,7 @@
     if (n >= 1 && n <= 9 && G.state === 'playing') {
       e.preventDefault();
       var tile = tiles[n - 1];
+      if (!tile) return;
       var r = tile.getBoundingClientRect();
       onTile(n - 1, r.left + r.width / 2, r.top + r.height / 2);
     }
@@ -615,10 +880,11 @@
   function refreshRunHud() {
     el.score.textContent = fmt(G.score);
     el.tier.textContent = String(G.tier);
-    el.cycleNum.textContent = G.cycleProgress + '/10';
+    el.cycleNum.textContent = G.cycleProgress + '/' + G.cycleTarget;
     var pips = '';
-    for (var i = 0; i < 10; i++) pips += '<i class="' + (i < G.cycleProgress ? 'on' : '') + '"></i>';
+    for (var i = 0; i < G.cycleTarget; i++) pips += '<i class="' + (i < G.cycleProgress ? 'on' : '') + '"></i>';
     el.pips.innerHTML = pips;
+    if (el.round) el.round.textContent = (G.round + 1) + '/3';
     el.streak.textContent = String(G.streak);
     el.streakWrap.classList.toggle('hot', G.streak >= 5);
     el.statAcc.textContent = accuracyPct() + '%';
@@ -628,9 +894,10 @@
   }
 
   function frameHud(t) {
+    var duration = G.roundDuration || 25;
     if (G.state === 'playing' || G.state === 'over') {
       el.timeValue.textContent = G.timeLeft.toFixed(1);
-      el.timebarFill.style.transform = 'scaleX(' + clamp(G.timeLeft / CONFIG.startTime, 0, 1) + ')';
+      el.timebarFill.style.transform = 'scaleX(' + clamp(G.timeLeft / duration, 0, 1) + ')';
       var sec = Math.ceil(G.timeLeft);
       el.clock.classList.toggle('warn', sec <= 10 && sec > 5);
       el.clock.classList.toggle('danger', sec <= 5 && G.state === 'playing');
@@ -651,7 +918,7 @@
     var label = G.pressure < 0.25 ? 'CALM' : G.pressure < 0.5 ? 'WARM' : G.pressure < 0.75 ? 'HOT' : 'CRITICAL';
     if (label !== G.pressureLabel) { G.pressureLabel = label; el.pressureLabel.textContent = label; }
 
-    var urgency = 1 - clamp(G.timeLeft / CONFIG.startTime, 0, 1);
+    var urgency = 1 - clamp(G.timeLeft / duration, 0, 1);
     backdrop.setUrgency(urgency);
     backdrop.setIntensity(clamp(G.pressure * 0.75 + urgency * 0.45, 0, 1));
     if (t - G.lastAudio > 120) {
@@ -707,6 +974,8 @@
     el.introBest.textContent = fmt(SAVE.best);
     el.introElo.textContent = String(Math.round(SAVE.elo));
     el.introGames.textContent = String(SAVE.games);
+    if (el.introBpi) el.introBpi.textContent = String(SAVE.bestBpi || 0);
+    if (el.introTitle) el.introTitle.textContent = SAVE.title || 'DRIFTER';
     el.gamesCount.textContent = SAVE.games + (SAVE.games === 1 ? ' run' : ' runs');
     el.bestScore.textContent = 'PB ' + fmt(SAVE.best);
     renderRuns();
@@ -714,15 +983,23 @@
   }
 
   function showIdle() {
-    G.timeLeft = CONFIG.startTime;
+    G.round = 0;
+    G.size = 3;
+    G.roundDuration = CONFIG.rounds[0].duration;
+    G.roundChurn = CONFIG.rounds[0].churn;
+    G.cycleTarget = CONFIG.rounds[0].cycle;
+    G.timeLeft = G.roundDuration;
     G.score = 0; G.tier = 0; G.cycleProgress = 0; G.pressure = 0.08;
     G.streak = 0; G.bestStreak = 0;
     G.layout = null; G.goal = null; G.cycleStart = null;
+    buildGrid(3);
+    hideRoundBreak();
     el.score.textContent = '0';
-    el.timeValue.textContent = CONFIG.startTime.toFixed(1);
+    el.timeValue.textContent = G.roundDuration.toFixed(1);
     el.timebarFill.style.transform = 'scaleX(1)';
-    el.cycleNum.textContent = '0/10';
+    el.cycleNum.textContent = '0/' + G.cycleTarget;
     el.tier.textContent = '0';
+    if (el.round) el.round.textContent = '1/3';
     el.pips.innerHTML = '';
     el.streak.textContent = '0';
     el.streakWrap.classList.remove('hot');
@@ -783,6 +1060,15 @@
   /* ---------- main loop ---------- */
   function loop(t) {
     requestAnimationFrame(loop);
+
+    /* Sample the run clock (countdown, play and breaks) once per second. */
+    if (G.runStartedAt && G.timeline.length < 120) {
+      var sampleDue = Math.floor((t - G.runStartedAt) / 1000);
+      while (G.timeline.length <= sampleDue && G.timeline.length < 120) {
+        G.timeline.push(Math.round(G.score));
+      }
+    }
+
     if (G.state === 'playing') {
       if (!G.lastFrame) G.lastFrame = t;
       var dt = clamp((t - G.lastFrame) / 1000, 0, 0.1);
@@ -790,8 +1076,12 @@
       G.timeLeft -= dt;
       if (G.timeLeft <= 0) {
         G.timeLeft = 0;
-        endRun();
+        endRound();
       } else {
+        if (G.duel && t - G.duelLastSent > 800) {
+          G.duelLastSent = t;
+          duelHook('progress', { round: G.round + 1, score: G.score, correct: G.correct });
+        }
         if (!G.resolving && t >= G.churnDeadline && t >= G.lockUntil) onChurnExpire(t);
         var sec = Math.ceil(G.timeLeft);
         if (sec <= 5 && sec >= 1 && sec !== G.lastTickSecond) {
@@ -801,7 +1091,16 @@
       }
     } else {
       G.lastFrame = t;
-      if (G.state === 'countdown') {
+      if (G.state === 'break') {
+        var remainBreak = G.breakEnd - t;
+        var breakNum = Math.max(0, Math.ceil(remainBreak / 1000));
+        if (breakNum !== G.breakNum) {
+          G.breakNum = breakNum;
+          el.breakNum.textContent = String(breakNum);
+          if (breakNum > 0) audio.countdown(breakNum);
+        }
+        if (remainBreak <= 0) enterRound(G.round + 1);
+      } else if (G.state === 'countdown') {
         var remain = G.countdownEnd - t;
         var num = Math.max(1, Math.ceil(remain / 1000));
         if (num !== G.countdownNum) setCountdown(num);
@@ -814,26 +1113,41 @@
   /* ---------- account + leaderboard ---------- */
   function signedIn() { return !!(Account && Account.user()); }
 
+  function avatarInner(user) {
+    if (user && user.avatar) {
+      return '<img src="' + user.avatar + '" alt="" />';
+    }
+    return '<span>' + String((user && user.username) || '?').charAt(0).toUpperCase() + '</span>';
+  }
+
+  function titleColor(name) {
+    return (window.ProfileUI && window.ProfileUI.titleColor) ? window.ProfileUI.titleColor(name) : '#94a3b8';
+  }
+
   function syncSaveFromUser(user) {
     if (!user) return;
     SAVE.elo = Number(user.rating) || 1000;
     SAVE.best = Number(user.bestScore) || 0;
     SAVE.bestTier = Number(user.bestTier) || 0;
     SAVE.games = Number(user.games) || 0;
+    SAVE.bestBpi = Number(user.bestBpi) || SAVE.bestBpi || 0;
+    SAVE.title = user.title || SAVE.title || 'DRIFTER';
     persist();
   }
 
   function renderAccount() {
     var user = Account && Account.user();
     if (user) {
-      el.accountAvatar.textContent = String(user.username).charAt(0).toUpperCase();
+      el.accountAvatar.innerHTML = avatarInner(user);
+      el.accountAvatar.classList.toggle('has-photo', !!user.avatar);
       el.accountName.textContent = '@' + user.username;
       el.accountBtn.classList.add('signed');
-      el.accountBtn.title = 'Signed in as @' + user.username + ' — open leaderboard';
+      el.accountBtn.title = 'Signed in as @' + user.username + ' — open profile';
       el.boardIdentity.textContent = 'Signed in as @' + user.username;
       el.boardLogout.hidden = false;
     } else {
-      el.accountAvatar.textContent = '?';
+      el.accountAvatar.innerHTML = '<span>?</span>';
+      el.accountAvatar.classList.remove('has-photo');
       el.accountName.textContent = 'SIGN IN';
       el.accountBtn.classList.remove('signed');
       el.accountBtn.title = 'Sign in to rank your runs';
@@ -873,6 +1187,10 @@
   }
 
   function requestStart() {
+    if (window.Duel && Duel.active && Duel.active()) {
+      if (Duel.primary) Duel.primary();
+      return;
+    }
     if (signedIn()) { startRun(); return; }
     if (guestMode) { startRun(); return; }
     if (!Account) { openAuth(true); return; }
@@ -930,16 +1248,45 @@
     });
   }
 
-  function openBoard(by) {
-    if (G.state === 'playing' || G.state === 'countdown') return;
-    boardSort = by === 'rating' ? 'rating' : 'score';
-    var tabs = document.querySelectorAll('.board-tab');
-    for (var i = 0; i < tabs.length; i++) {
-      var on = tabs[i].dataset.by === boardSort;
-      tabs[i].classList.toggle('active', on);
-      tabs[i].setAttribute('aria-selected', String(on));
+  /* ---------- leaderboard ---------- */
+  function metricValue(row, by) {
+    if (!row) return 0;
+    if (by === 'rating') return Number(row.rating) || 0;
+    if (by === 'bpi') return Number(row.bestBpi) || 0;
+    return Number(row.bestScore) || 0;
+  }
+
+  function metricLabel(by) {
+    return by === 'rating' ? 'RATING' : by === 'bpi' ? 'BPI' : 'SCORE';
+  }
+
+  function syncSeg(container, attr, value) {
+    if (!container) return;
+    var buttons = container.querySelectorAll('button');
+    for (var i = 0; i < buttons.length; i++) {
+      var on = buttons[i].getAttribute(attr) === value;
+      buttons[i].classList.toggle('active', on);
+      buttons[i].setAttribute('aria-pressed', String(on));
     }
+  }
+
+  function syncBoardFilters() {
+    syncSeg(el.boardScopes, 'data-scope', boardScope);
+    syncSeg(el.boardPeriods, 'data-period', boardPeriod);
+    syncSeg(el.boardMetrics, 'data-by', boardBy);
+  }
+
+  function periodLabel(data) {
+    if (boardPeriod === 'week') return data.weekLabel || 'THIS WEEK';
+    if (boardPeriod === 'season') return data.seasonLabel || 'THIS SEASON';
+    return 'ALL TIME';
+  }
+
+  function openBoard(by) {
+    if (G.state === 'playing' || G.state === 'countdown' || G.state === 'break') return;
+    if (by && /^(bpi|score|rating)$/.test(by)) boardBy = by;
     showScreen(el.boardScreen);
+    syncBoardFilters();
     loadBoard();
   }
 
@@ -952,7 +1299,13 @@
     var id = ++boardRequest;
     el.boardList.innerHTML = '<p class="board-empty">Loading the board…</p>';
     el.boardMe.hidden = true;
-    Account.leaderboard(boardSort, 50).then(function (data) {
+    syncBoardFilters();
+    Account.leaderboard({
+      by: boardBy,
+      scope: boardScope,
+      period: boardPeriod,
+      limit: 50
+    }).then(function (data) {
       if (id !== boardRequest) return;
       renderBoard(data);
     }).catch(function () {
@@ -963,31 +1316,47 @@
 
   function renderBoard(data) {
     var user = Account && Account.user();
-    var label = boardSort === 'rating' ? 'RATING' : 'HIGH SCORE';
+    var label = metricLabel(boardBy);
+    el.boardScopeLabel.textContent = data.scopeLabel || 'WORLDWIDE';
+    el.boardPeriodLabel.textContent = periodLabel(data);
     el.boardPlayers.textContent = data.players + (data.players === 1 ? ' ranked player' : ' ranked players');
     el.boardOnline.textContent = data.online + ' online now';
 
+    if (!data.scopeAvailable) {
+      el.boardList.innerHTML = '<p class="board-empty">We could not resolve your ' +
+        (boardScope === 'country' ? 'country' : 'region') +
+        '. Play from a network that exposes location or switch to Global.</p>';
+      el.boardMe.hidden = true;
+      return;
+    }
+
     if (!data.entries.length) {
-      el.boardList.innerHTML = '<p class="board-empty">No ranked runs yet. Be the first on the board.</p>';
+      el.boardList.innerHTML = '<p class="board-empty">No ranked runs on this board yet. Be the first.</p>';
     } else {
       var html = '';
       for (var i = 0; i < data.entries.length; i++) {
         var row = data.entries[i];
         var mine = user && row.id === user.id;
-        var value = boardSort === 'rating' ? row.rating : row.bestScore;
-        html += '<div class="board-row' + (mine ? ' me' : '') + '" data-rank="' + row.rank + '">' +
+        var value = metricValue(row, boardBy);
+        html += '<button class="board-row' + (mine ? ' me' : '') + '" type="button" data-user="' + row.username + '"' +
+          ' data-rank="' + row.rank + '" aria-label="Open ' + row.username + ' profile">' +
           '<span class="board-rank">' + String(row.rank).padStart(2, '0') + '</span>' +
-          '<span class="board-name">' + row.username +
-          (mine ? '<span class="board-you">YOU</span>' : '') +
-          '<small>' + row.games + (row.games === 1 ? ' run' : ' runs') + '</small></span>' +
+          '<span class="board-person">' +
+            '<span class="board-avatar' + (row.avatar ? ' has-photo' : '') + '">' + avatarInner(row) + '</span>' +
+            '<span class="board-name">' + row.username +
+              (mine ? '<span class="board-you">YOU</span>' : '') +
+              '<small style="color:' + titleColor(row.title) + '">' + (row.title || 'DRIFTER') +
+              ' · ' + row.games + (row.games === 1 ? ' run' : ' runs') + '</small>' +
+            '</span>' +
+          '</span>' +
           '<span class="board-val">' + fmt(value) + '<em>' + label + '</em></span>' +
-          '</div>';
+          '</button>';
       }
       el.boardList.innerHTML = html;
     }
 
     if (data.me) {
-      var myValue = boardSort === 'rating' ? data.me.rating : data.me.bestScore;
+      var myValue = metricValue(data.me, boardBy);
       el.boardMe.innerHTML = 'YOUR RANK <b>#' + data.me.rank + '</b> · ' + fmt(myValue) +
         ' <span style="color:var(--dim)">' + label + '</span>';
       el.boardMe.hidden = false;
@@ -1002,7 +1371,7 @@
 
   function loadGlobalCard() {
     if (!Account || !el.globalTop) return;
-    Account.leaderboard('score', 3).then(function (data) {
+    Account.leaderboard({ by: 'bpi', scope: 'global', period: 'season', limit: 3 }).then(function (data) {
       if (!data.entries.length) {
         el.globalTop.innerHTML = '<p class="card-note">No ranked players yet. Be the first.</p>';
         return;
@@ -1012,11 +1381,101 @@
         var row = data.entries[i];
         html += '<div class="global-row"><span class="gr">' + String(row.rank).padStart(2, '0') + '</span>' +
           '<span class="gn">' + row.username + '</span>' +
-          '<span class="gv">' + fmt(row.bestScore) + '</span></div>';
+          '<span class="gv">' + fmt(row.bestBpi) + '</span></div>';
       }
       el.globalTop.innerHTML = html;
     }).catch(function () {
       el.globalTop.innerHTML = '<p class="card-note">Leaderboard unavailable.</p>';
+    });
+  }
+
+  /* ---------- profiles ---------- */
+  function openProfile(username, gameId) {
+    if (!Account) return;
+    var name = String(username || '').trim();
+    if (!name) return;
+    profileReturn = el.boardScreen.classList.contains('show') ? 'board'
+      : G.state === 'over' ? 'over' : 'intro';
+    currentProfileGame = gameId || 'tile-rush';
+    currentProfile = null;
+    currentProfileSelf = false;
+    el.profileScreen.classList.add('show');
+    el.profileName.textContent = '@' + name.toLowerCase();
+    el.profileMeta.textContent = '';
+    el.profileOnline.hidden = true;
+    el.profileSeasons.innerHTML = '<p class="ps-empty">Loading…</p>';
+    loadProfile(name, currentProfileGame);
+  }
+
+  function loadProfile(username, gameId) {
+    var id = ++profileRequest;
+    Account.profile(username, gameId).then(function (data) {
+      if (id !== profileRequest) return;
+      currentProfile = data.profile;
+      currentProfileSelf = !!data.isSelf;
+      currentProfileGame = gameId;
+      if (window.ProfileUI) window.ProfileUI.render(data.profile, data.isSelf, gameId);
+      if (data.isSelf) syncSaveFromUser(data.profile.user);
+    }).catch(function () {
+      if (id !== profileRequest) return;
+      el.profileSeasons.innerHTML = '<p class="ps-empty">Could not load this profile.</p>';
+    });
+  }
+
+  function closeProfile() {
+    profileRequest++;
+    el.profileScreen.classList.remove('show');
+    currentProfile = null;
+  }
+
+  function wireAvatarUpload() {
+    if (!el.avatarInput) return;
+    el.avatarInput.addEventListener('change', function () {
+      var file = el.avatarInput.files && el.avatarInput.files[0];
+      el.avatarInput.value = '';
+      if (!file) return;
+      if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+        el.avatarHint.textContent = 'Use a PNG, JPEG or WebP image.';
+        return;
+      }
+      compressAvatar(file).then(function (dataUrl) {
+        el.avatarHint.textContent = 'Uploading…';
+        return Account.updateAvatar(dataUrl).then(function () {
+          el.avatarHint.textContent = 'Photo updated.';
+          renderAccount();
+          if (currentProfile) loadProfile(currentProfile.user.username, currentProfileGame);
+        });
+      }).catch(function (err) {
+        el.avatarHint.textContent = err && err.message ? err.message : 'Could not update the photo.';
+      });
+    });
+  }
+
+  function compressAvatar(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('Could not read that file.')); };
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = function () { reject(new Error('That image could not be decoded.')); };
+        img.onload = function () {
+          var size = 96;
+          var canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          var side = Math.min(img.width, img.height);
+          ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+          var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          if (dataUrl.length > 160000) {
+            reject(new Error('That photo is too detailed. Try a smaller one.'));
+            return;
+          }
+          resolve(dataUrl);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
     });
   }
 
@@ -1026,14 +1485,26 @@
     if (!Account || !Account.user()) return;
     var submit = pendingSubmit = Account.submitRun(run).then(function (data) {
       syncSaveFromUser(data.user);
-      if (G.runId === runId && G.state === 'over') {
-        var rank = rankOf(data.run.after);
-        el.eloBefore.textContent = String(data.run.before);
-        el.eloAfter.textContent = String(data.run.after);
-        el.eloDelta.textContent = (data.run.delta >= 0 ? '+' : '') + data.run.delta;
-        el.eloDelta.className = 'delta ' + (data.run.delta >= 0 ? 'up' : 'down');
-        el.rankPill.textContent = rank.name;
-        el.rankPill.style.color = rank.color;
+      if (G.runId !== runId || G.state !== 'over') return;
+      var r = data.run;
+      var rank = rankOf(r.after);
+      el.eloBefore.textContent = String(r.before);
+      el.eloAfter.textContent = String(r.after);
+      el.eloDelta.textContent = (r.delta >= 0 ? '+' : '') + r.delta;
+      el.eloDelta.className = 'delta ' + (r.delta >= 0 ? 'up' : 'down');
+      el.rankPill.textContent = rank.name;
+      el.rankPill.style.color = rank.color;
+      if (r.metrics) {
+        G.finalMetrics = r.metrics;
+        el.finalBpi.textContent = String(r.bpi);
+        el.finalTitle.textContent = r.title;
+        el.finalTitle.style.color = titleColor(r.title);
+        el.finalArchetype.textContent = r.archetype;
+        el.overFeedback.textContent = r.metrics.feedback.headline + ' ' + r.metrics.feedback.body;
+        el.overNote.textContent = r.metrics.feedback.drill || '';
+        if (window.ProfileUI && el.overRadar) {
+          el.overRadar.innerHTML = window.ProfileUI.radarSVG(r.metrics.axes, 168);
+        }
       }
       refreshMeta();
       loadGlobalCard();
@@ -1045,11 +1516,17 @@
   }
 
   /* ---------- boot ---------- */
-  function buildGrid() {
-    for (var i = 0; i < 9; i++) {
+  function buildGrid(size) {
+    G.size = size;
+    tiles = [];
+    el.grid.innerHTML = '';
+    el.grid.style.setProperty('--n', String(size));
+    el.grid.dataset.n = String(size);
+    var count = size * size;
+    for (var i = 0; i < count; i++) {
       var d = document.createElement('div');
       d.className = 'tile empty';
-      d.dataset.index = i;
+      d.dataset.index = String(i);
       d.setAttribute('role', 'button');
       d.setAttribute('tabindex', '-1');
       d.setAttribute('aria-label', 'Tile ' + (i + 1) + ', empty');
@@ -1058,7 +1535,6 @@
     }
   }
 
-  buildGrid();
   document.body.classList.toggle('no-motion', !SAVE.settings.motion);
   var params = new URLSearchParams(window.location.search);
   if (params.has('still')) document.body.classList.add('still');
@@ -1069,8 +1545,11 @@
 
   el.startBtn.addEventListener('click', requestStart);
   el.againBtn.addEventListener('click', requestStart);
-  el.homeBtn.addEventListener('click', toMenu);
-  el.overBoardBtn.addEventListener('click', function () { openBoard('score'); });
+  el.homeBtn.addEventListener('click', function () {
+    if (window.Duel && Duel.active && Duel.active()) { Duel.leave(); return; }
+    toMenu();
+  });
+  el.overBoardBtn.addEventListener('click', function () { openBoard('bpi'); });
   if (window.location.search) el.overInsightsBtn.href = 'insights.html' + window.location.search;
   // Leaving mid-submit would cancel the request, so let the run save first.
   el.overInsightsBtn.addEventListener('click', function (e) {
@@ -1092,13 +1571,25 @@
   });
 
   el.accountBtn.addEventListener('click', function () {
-    if (signedIn()) openBoard('score');
+    if (signedIn()) openProfile(Account.user().username);
     else openAuth(false);
   });
-  el.introBoardBtn.addEventListener('click', function () { openBoard('score'); });
-  el.panelBoardBtn.addEventListener('click', function () { openBoard('score'); });
+  el.introBoardBtn.addEventListener('click', function () { openBoard(); });
+  el.panelBoardBtn.addEventListener('click', function () { openBoard('bpi'); });
   el.authClose.addEventListener('click', closeAuth);
   el.boardClose.addEventListener('click', closeBoard);
+  el.profileClose.addEventListener('click', closeProfile);
+  el.profileBoardBtn.addEventListener('click', function () {
+    closeProfile();
+    openBoard(boardBy);
+  });
+  el.avatarBtn.addEventListener('click', function () { el.avatarInput.click(); });
+  el.profileGameSelect.addEventListener('change', function () {
+    if (!currentProfile) return;
+    loadProfile(currentProfile.user.username, el.profileGameSelect.value);
+  });
+  wireAvatarUpload();
+
   el.tabLogin.addEventListener('click', function () { setAuthMode('login'); });
   el.tabRegister.addEventListener('click', function () { setAuthMode('register'); });
   el.authForm.addEventListener('submit', submitAuth);
@@ -1110,12 +1601,29 @@
     if (shouldStart) startRun();
   });
 
-  var boardTabs = document.querySelectorAll('.board-tab');
-  for (var b = 0; b < boardTabs.length; b++) {
-    boardTabs[b].addEventListener('click', function () {
-      openBoard(this.dataset.by);
-    });
-  }
+  el.boardScopes.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-scope]');
+    if (!btn) return;
+    boardScope = btn.getAttribute('data-scope');
+    loadBoard();
+  });
+  el.boardPeriods.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-period]');
+    if (!btn) return;
+    boardPeriod = btn.getAttribute('data-period');
+    loadBoard();
+  });
+  el.boardMetrics.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-by]');
+    if (!btn) return;
+    boardBy = btn.getAttribute('data-by');
+    loadBoard();
+  });
+  el.boardList.addEventListener('click', function (e) {
+    var row = e.target.closest('.board-row');
+    if (!row) return;
+    openProfile(row.getAttribute('data-user'));
+  });
 
   el.boardLogout.addEventListener('click', function () {
     if (!Account) return;
@@ -1140,6 +1648,30 @@
   } else {
     renderAccount();
   }
+
+  /* ---------- public hooks for the 1v1 layer ---------- */
+  window.TileRush = {
+    startDuel: function (seed, opponent) {
+      G.duel = true;
+      G.duelSeed = String(seed || 'duel');
+      G.duelOpp = opponent || null;
+      G.duelDeal = 0;
+      G.duelLastSent = 0;
+      startRun();
+    },
+    isDuel: function () { return G.duel; },
+    openAuth: openAuth,
+    state: function () {
+      return {
+        state: G.state,
+        round: G.round + 1,
+        score: G.score,
+        correct: G.correct,
+        bpi: G.finalMetrics ? G.finalMetrics.bpi : 0
+      };
+    },
+    toMenu: toMenu
+  };
 
   requestAnimationFrame(loop);
 

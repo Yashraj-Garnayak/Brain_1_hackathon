@@ -15,6 +15,9 @@ const { syncRingRange, rtStats } = require('../lib/insights');
 const { snapshotAt } = require('../lib/ultrahuman');
 
 const DAYS = 30;
+// Its own game id keeps demo runs out of leaderboards, profiles and ghosts,
+// which all read game_id = 'tile-rush'. Insights reads run_details, so it still sees them.
+const DEMO_GAME_ID = 'tile-rush-demo';
 const PLAY_SHARE = 0.65; // fraction of days with at least one session
 
 // Deterministic so re-seeding gives the same history.
@@ -184,9 +187,9 @@ async function main() {
         try {
           await client.query('begin');
           const { rows: ins } = await client.query(
-            `insert into runs (user_id, score, tier, accuracy, avg_rt, rating_before, rating_after, created_at)
-             values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-            [user.id, run.score, run.tier, run.accuracy, run.avgRt, rating, after, playedAt]
+            `insert into runs (user_id, score, tier, accuracy, avg_rt, rating_before, rating_after, created_at, game_id)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+            [user.id, run.score, run.tier, run.accuracy, run.avgRt, rating, after, playedAt, DEMO_GAME_ID]
           );
           await client.query(
             `insert into run_details (

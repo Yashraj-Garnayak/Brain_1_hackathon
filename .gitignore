@@ -3,5 +3,8 @@
 .vercel
 .env*
 node_modules/
+worker/public/
+worker/.wrangler/
+.wrangler/
 
-.vercel
+.dev.vars
