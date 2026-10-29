@@ -171,8 +171,36 @@
     breakEnd: 0, breakNum: 0,
     trials: [], roundStats: [], roundBase: null, finalMetrics: null,
     runSymbols: {}, lastFrame: 0, lastAudio: 0, pressureLabel: '',
-    eloBefore: SAVE.elo, eloDelta: 0
+    eloBefore: SAVE.elo, eloDelta: 0,
+    duel: false, duelSeed: '', duelDeal: 0, duelOpp: null, duelLastSent: 0
   };
+
+  /* ---------- deterministic boards for 1v1 ---------- */
+  /* Board generation is normally adaptive. In a duel both players must face the
+     same ordered sequence, so each board is generated from (seed, round, index)
+     instead of local history. */
+  function hashSeed(text) {
+    var h = 1779033703 ^ text.length;
+    for (var i = 0; i < text.length; i++) {
+      h = Math.imul(h ^ text.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return h >>> 0;
+  }
+  function seededRandom(text) {
+    var a = hashSeed(String(text));
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function duelHook(name, data) {
+    var duel = window.Duel;
+    if (!duel || typeof duel[name] !== 'function') return;
+    try { duel[name](data); } catch (e) { /* never break the run */ }
+  }
 
   /* ---------- persistence helpers ---------- */
   function runStats(id) { return G.runSymbols[id] || (G.runSymbols[id] = zeroStats()); }
@@ -188,7 +216,8 @@
     var spd = clamp((1800 - rt) / 1500, 0, 1);
     return clamp(acc * 0.62 + spd * 0.38, 0, 1);
   }
-  function pickGoalShape() {
+  function pickGoalShape(random) {
+    var roll = random || Math.random;
     var weights = [], total = 0;
     for (var i = 0; i < SHAPE_LIST.length; i++) {
       var s = mergedStats(SHAPE_LIST[i].id);
@@ -199,7 +228,7 @@
       weights.push(w);
       total += w;
     }
-    var r = Math.random() * total;
+    var r = roll() * total;
     for (var j = 0; j < SHAPE_LIST.length; j++) {
       r -= weights[j];
       if (r <= 0) return SHAPE_LIST[j];
@@ -215,12 +244,18 @@
   function deal() {
     if (G.state !== 'playing' && G.state !== 'countdown' && G.state !== 'warmup') return;
     var t = now();
-    var goalShape = pickGoalShape();
-    var goalColor = pick(PALETTE);
+    var duelRng = G.duel ? seededRandom(G.duelSeed + ':' + G.round + ':' + (G.duelDeal++)) : null;
+    var random = duelRng || Math.random;
+    var rPick = function (list) { return list[Math.floor(random() * list.length)]; };
+    var rRand = function (n) { return Math.floor(random() * n); };
+    var goalShape = G.duel ? rPick(SHAPE_LIST) : pickGoalShape();
+    var goalColor = G.duel ? rPick(PALETTE) : pick(PALETTE);
     var goal = { shape: goalShape, color: goalColor, key: goalShape.id + '|' + goalColor.id };
-    var near = clamp(0.05 + G.pressure * 0.5 + G.tier * 0.025 + (G.size - 3) * 0.08, 0, 0.82);
+    var near = G.duel
+      ? clamp(0.06 + (G.size - 3) * 0.1 + Math.min(G.duelDeal, 40) * 0.009, 0, 0.62)
+      : clamp(0.05 + G.pressure * 0.5 + G.tier * 0.025 + (G.size - 3) * 0.08, 0, 0.82);
     var n = G.size * G.size;
-    var used = {}, cells = new Array(n), goalIndex = rand(n);
+    var used = {}, cells = new Array(n), goalIndex = rRand(n);
     used[goal.key] = true;
     cells[goalIndex] = goal;
 
@@ -235,11 +270,11 @@
       }
     }
     function decoyColor() {
-      if (Math.random() < 0.5) {
+      if (random() < 0.5) {
         var pool = PALETTE.filter(function (c) { return c.group === goalColor.group; });
-        return pick(pool);
+        return rPick(pool);
       }
-      return pick(PALETTE);
+      return rPick(PALETTE);
     }
 
     for (var i = 0; i < n; i++) {
@@ -247,17 +282,17 @@
       var cell = null;
       for (var attempt = 0; attempt < 26 && !cell; attempt++) {
         var shape, color;
-        if (Math.random() < near) {
-          if (family.length && Math.random() < 0.58) {
-            shape = pick(family);
-            color = Math.random() < 0.4 ? goalColor : decoyColor();
+        if (random() < near) {
+          if (family.length && random() < 0.58) {
+            shape = rPick(family);
+            color = random() < 0.4 ? goalColor : decoyColor();
           } else {
-            shape = Math.random() < 0.22 ? goalShape : pick(SHAPE_LIST);
+            shape = random() < 0.22 ? goalShape : rPick(SHAPE_LIST);
             color = decoyColor();
           }
         } else {
-          shape = pick(SHAPE_LIST);
-          color = pick(PALETTE);
+          shape = rPick(SHAPE_LIST);
+          color = rPick(PALETTE);
         }
         var key = shape.id + '|' + color.id;
         if (!used[key]) { used[key] = true; cell = { shape: shape, color: color, key: key }; }
@@ -468,6 +503,7 @@
       audio.stopMusic();
       audio.cycle();
       showRoundBreak();
+      if (G.duel) duelHook('break', { round: G.round + 1, score: G.score });
       return;
     }
     endRun();
@@ -555,6 +591,7 @@
     refreshMeta();
     showScreen(el.overScreen);
     backdrop.pulse(1.4);
+    if (G.duel) duelHook('finish', { score: G.score, bpi: metrics.bpi });
     submitRun({
       score: G.score,
       tier: G.maxTier,
@@ -581,6 +618,8 @@
     G.runSymbols = {};
     G.lockUntil = Infinity;
     G.resolving = false;
+    G.duelDeal = 0;
+    G.duelLastSent = 0;
   }
 
   function startRun() {
@@ -686,6 +725,7 @@
     el.goalCard.classList.remove('locked');
     el.grid.classList.remove('break');
     refreshRunHud();
+    if (G.duel) duelHook('round', { round: index + 1 });
   }
 
   function showRoundBreak() {
@@ -728,11 +768,15 @@
     G.state = 'intro';
     G.runId++;
     G.roundId++;
-    audio.stopMusic();
+    G.duel = false;
+    G.duelSeed = '';
+    G.duelOpp = null;
     hideRoundBreak();
+    hideCountdown();
     showScreen(el.introScreen);
     showIdle();
     refreshMeta();
+    duelHook('closed');
   }
 
   /* ---------- input ---------- */
@@ -1007,6 +1051,10 @@
         G.timeLeft = 0;
         endRound();
       } else {
+        if (G.duel && t - G.duelLastSent > 800) {
+          G.duelLastSent = t;
+          duelHook('progress', { round: G.round + 1, score: G.score, correct: G.correct });
+        }
         if (!G.resolving && t >= G.churnDeadline && t >= G.lockUntil) onChurnExpire(t);
         var sec = Math.ceil(G.timeLeft);
         if (sec <= 5 && sec >= 1 && sec !== G.lastTickSecond) {
@@ -1112,6 +1160,10 @@
   }
 
   function requestStart() {
+    if (window.Duel && Duel.active && Duel.active()) {
+      if (Duel.primary) Duel.primary();
+      return;
+    }
     if (signedIn()) { startRun(); return; }
     if (guestMode) { startRun(); return; }
     if (!Account) { openAuth(true); return; }
@@ -1462,7 +1514,10 @@
 
   el.startBtn.addEventListener('click', requestStart);
   el.againBtn.addEventListener('click', requestStart);
-  el.homeBtn.addEventListener('click', toMenu);
+  el.homeBtn.addEventListener('click', function () {
+    if (window.Duel && Duel.active && Duel.active()) { Duel.leave(); return; }
+    toMenu();
+  });
   el.overBoardBtn.addEventListener('click', function () { openBoard('bpi'); });
   el.muteBtn.addEventListener('click', toggleMute);
   el.musicToggle.addEventListener('click', toggleMute);
@@ -1553,6 +1608,30 @@
   } else {
     renderAccount();
   }
+
+  /* ---------- public hooks for the 1v1 layer ---------- */
+  window.TileRush = {
+    startDuel: function (seed, opponent) {
+      G.duel = true;
+      G.duelSeed = String(seed || 'duel');
+      G.duelOpp = opponent || null;
+      G.duelDeal = 0;
+      G.duelLastSent = 0;
+      startRun();
+    },
+    isDuel: function () { return G.duel; },
+    openAuth: openAuth,
+    state: function () {
+      return {
+        state: G.state,
+        round: G.round + 1,
+        score: G.score,
+        correct: G.correct,
+        bpi: G.finalMetrics ? G.finalMetrics.bpi : 0
+      };
+    },
+    toMenu: toMenu
+  };
 
   requestAnimationFrame(loop);
 

@@ -6,3 +6,5 @@ node_modules/
 worker/public/
 worker/.wrangler/
 .wrangler/
+
+.dev.vars

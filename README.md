@@ -2,7 +2,7 @@
 
 A browser reflex trainer built around **target updating**: find the one tile that matches a shape-and-colour target while the board keeps moving. Three rounds, a non-stopping clock, procedural pressure music, an Elo-style duel rating, accounts, a **0–1000 Brain Performance Index (BPI)**, titles, seasonal stats, and layered global/regional leaderboards.
 
-The client is plain HTML/CSS/JS with no build step. Accounts, runs, profiles and leaderboards are Neon Postgres behind Vercel serverless functions in `api/`. A Cloudflare Worker + Durable Objects scaffold lives in `worker/` for the realtime 1v1 phase — see [Cloudflare / 1v1](#cloudflare--1v1).
+The client is plain HTML/CSS/JS with no build step. Accounts, runs, profiles and leaderboards are Neon Postgres behind Vercel serverless functions in `api/`. Realtime 1v1 runs on a Cloudflare Worker with Durable Objects in `worker/` — see [1v1 duels](#1v1-duels).
 
 ## Run it
 
@@ -147,6 +147,7 @@ delta    = clamp(K × (actual − expected), −60, +60)
 | `GET` | `/api/leaderboard?by=bpi\|score\|rating&scope=global\|country\|region&period=week\|season&game=tile-rush` | Ranked players, your rank, totals |
 | `GET` | `/api/users/:username?game=tile-rush` | Public profile (`self` is `null` for other players) |
 | `POST` | `/api/profile` | Update your avatar |
+| `POST` | `/api/match/ticket` | Short-lived signed ticket + Worker URLs for 1v1 |
 
 ## Data model
 
@@ -166,12 +167,15 @@ js/audio.js          WebAudio sequencer + SFX
 js/background.js     canvas backdrop
 js/account.js        auth/session + profile + leaderboard client
 js/game.js           state machine, three rounds, scoring, UI
+js/duel.js           1v1 queue, socket, emotes, result overlay
 js/profile.js        profile, BPI radar, season switcher + sparkline
 api/auth/*.js        register / login / logout / me
 api/runs.js          ranked run submission (authoritative BPI + Elo)
 api/leaderboard.js   layered weekly/seasonal boards
 api/users/[username].js  public profile
 api/profile.js       avatar update
+api/match/ticket.js  signed 1v1 ticket for the Cloudflare Worker
+lib/match-ticket.js  HMAC ticket mint + Worker endpoints
 shared/bpi.js        canonical BPI axes, titles, archetypes, feedback
 lib/auth.js          scrypt, cookies, sessions, geo
 lib/db.js            pooled Neon connection
@@ -185,9 +189,17 @@ scripts/migrate.mjs  migration runner
 worker/              Cloudflare Worker + Durable Objects scaffold
 ```
 
-## Cloudflare / 1v1
+## 1v1 duels
 
-The realtime phase runs on a Cloudflare Worker with Durable Objects; the REST API stays on Vercel/Neon until the Worker data layer is ported. **No paid plan is needed:** Workers Free includes SQLite-backed Durable Objects (our config uses `new_sqlite_classes`), with 100k DO requests/day, 13k GB-s/day and 1 GB storage per object. Static assets are not counted against the Worker quota.
+**PLAY 1V1** on the menu queues you for a live head-to-head. Both players get the same three rounds, the same 5-second breaks, and the same ordered board sequence: when a duel deals its *n*-th board of a round, both clients generate that board from `HMAC-free hash(seed, round, n)`, so a player who is ahead sees the same layouts as a player who is behind. The server owns the countdown, relays live scores and decides the winner.
+
+1. The client asks Vercel for a ticket: `POST /api/match/ticket` returns a signed, 10-minute HMAC token (`MATCH_SECRET`) plus the Worker URLs.
+2. It polls `POST /api/match/queue` with that ticket. `QueueRoom` keys entries by account id, so two tabs of one account never pair together.
+3. Both sockets open `/api/match/:id/ws?ticket=…`. The Worker verifies the ticket on every connection and passes the identity to `MatchRoom`; client-supplied names are ignored.
+4. Ready → shared 3-second countdown → three rounds. Scores stream to the opponent, emotes unlock during breaks, and both runs are submitted to `/api/runs` so they count for BPI, Elo, seasons and leaderboards.
+5. Rematch resets the match with a fresh seed; leaving closes the socket.
+
+The realtime layer runs on a Cloudflare Worker with Durable Objects; the REST API stays on Vercel/Neon. **No paid plan is needed:** Workers Free includes SQLite-backed Durable Objects (our config uses `new_sqlite_classes`), with 100k DO requests/day, 13k GB-s/day and 1 GB storage per object. Static assets are not counted against the Worker quota.
 
 ```bash
 npm run worker:assets   # copy index.html, css/, js/, shared/ into worker/public
@@ -195,15 +207,16 @@ npm run worker:dev      # local Worker on :8787 (static assets + realtime API)
 npm run worker:deploy   # requires `npx wrangler login` (free account)
 ```
 
-`worker/src/index.js` serves `/api/health`, `/api/match/queue` and `/api/match/:id/ws`, then falls back to static assets. `MatchRoom` is a hibernating WebSocket Durable Object for a 1v1 match (join, ready, emote, round progress, result); `QueueRoom` pairs two players and creates a match id.
+Required configuration:
 
-`uday.live` is on Vercel DNS, so use the free `<worker>.<subdomain>.workers.dev` hostname rather than a `uday.live` subdomain. Cookies do not cross hostnames; mint a short-lived signed match ticket from `/api/match/ticket` on Vercel and hand it to the Worker.
+| Where | Name | Value |
+| --- | --- | --- |
+| Vercel env + `worker/.dev.vars` | `MATCH_SECRET` | long random string, identical on both sides |
+| Vercel env + `.env.local` | `MATCH_URL` | Worker origin, e.g. `https://tile-rush.<subdomain>.workers.dev` |
+| Worker secret (production) | `MATCH_SECRET` | `wrangler secret put MATCH_SECRET` |
 
-Next steps for the full cutover:
+`worker/src/index.js` serves `/api/health`, `/api/match/queue` and `/api/match/:id/ws`, then falls back to static assets. `MatchRoom` is a hibernating WebSocket Durable Object (ready, seed, countdown, progress, emote, result, rematch); `QueueRoom` pairs two players and creates a match id.
 
-1. `wrangler login` with a free account, `npm run worker:deploy`, set `API_ORIGIN`.
-2. Port `api/*` to Worker routes (Neon HTTP driver or Hyperdrive) and point the client at the Worker.
-3. Move `/api/runs` scoring into the Worker so BPI and Elo are computed at the edge.
-4. Wire `MatchRoom` into the client: shared seed, same board order, the existing three rounds, emotes during the 5-second breaks, and a head-to-head rating delta.
+`uday.live` is on Vercel DNS, so 1v1 uses the free `<worker>.<subdomain>.workers.dev` hostname rather than a `uday.live` subdomain. Cookies do not cross hostnames, which is why joins use the signed ticket instead of `tr_session`.
 
-Until then the Vercel deployment remains the source of truth, and 1v1 is not exposed in the UI.
+Remaining work: port `api/*` to Worker routes (Neon HTTP driver or Hyperdrive) and move BPI/Elo computation to the edge. The Vercel deployment remains the source of truth for accounts and ranked runs.

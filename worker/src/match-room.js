@@ -5,19 +5,22 @@
  * hibernation API, so an idle match costs nothing while both players sit in a
  * break.
  *
+ * Identity is never trusted from the socket payload: the Worker verifies the
+ * Vercel-signed match ticket and passes `x-tr-uid` / `x-tr-name` headers.
+ *
  * Protocol (client -> server):
- *   join     { player: { name, avatar? } }
  *   ready    { ready: true }
  *   progress { round, correct, score, bpi? }   // live opponent meter
  *   finish   { score, bpi }
  *   emote    { id }                            // client sends these in breaks
  *   rematch  {}
  *   ping     {}
+ *   join     {}                                // legacy no-op, identity is fixed
  *
  * Server -> client:
  *   state    { match, you }
  *   peer     { player }
- *   countdown{ startsAt, round }
+ *   countdown{ startsAt, round, seed }
  *   progress { from, round, correct, score }
  *   emote    { from, id }
  *   result   { winner, players }
@@ -41,12 +44,12 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
 }
 
-function cleanName(value) {
-  return String(value || '').trim().slice(0, 32);
-}
-
 function score(value) {
   return Math.max(0, Math.min(MAX_SCORE, Number(value) || 0));
+}
+
+function newSeed() {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
 export class MatchRoom {
@@ -62,11 +65,21 @@ export class MatchRoom {
       status: 'open',
       round: 0,
       startsAt: 0,
+      seed: newSeed(),
       winner: null,
       players: [],
       updatedAt: Date.now()
     };
-    for (const player of this.match.players) player.connected = false;
+    if (!this.match.seed) this.match.seed = newSeed();
+
+    /* Hibernation drops no sockets, but it does drop in-memory flags. Derive
+       connectivity from the live sockets instead of resetting everyone. */
+    const live = new Set();
+    for (const ws of this.sockets()) {
+      const attachment = ws.deserializeAttachment();
+      if (attachment && attachment.uid) live.add(attachment.uid);
+    }
+    for (const player of this.match.players) player.connected = live.has(player.uid);
     return this.match;
   }
 
@@ -80,15 +93,73 @@ export class MatchRoom {
       return json({ error: 'upgrade_required' }, 426);
     }
 
+    const uid = request.headers.get('x-tr-uid');
+    let name = request.headers.get('x-tr-name') || '';
+    try { name = decodeURIComponent(name); } catch { /* keep raw */ }
+    name = String(name).trim().slice(0, 32);
+    if (!uid || !name) return json({ error: 'ticket_required' }, 401);
+
     const match = await this.load();
+
+    const existing = match.players.find((p) => p.uid === uid);
+    if (existing) {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.state.acceptWebSocket(server);
+      server.serializeAttachment({ uid });
+      existing.connected = true;
+      existing.name = name;
+      await this.save();
+      this.send(server, { type: 'state', you: this.publicPlayer(existing), match: this.snapshot() });
+      this.broadcast({ type: 'state', match: this.snapshot() }, server);
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
     if (this.sockets().length >= MAX_PLAYERS) return json({ error: 'match_full' }, 409);
+
+    const open = match.status === 'open' || match.status === 'countdown';
+    if (match.players.length >= MAX_PLAYERS && !open) {
+      return json({ error: 'match_full' }, 409);
+    }
+    if (match.players.length >= MAX_PLAYERS) {
+      match.players = match.players.filter((p) => p.connected);
+    }
+    if (match.players.length >= MAX_PLAYERS) {
+      return json({ error: 'match_full' }, 409);
+    }
+
+    const player = {
+      uid,
+      name,
+      ready: false,
+      score: 0,
+      bpi: 0,
+      done: false,
+      connected: true
+    };
+    match.players.push(player);
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
+    server.serializeAttachment({ uid });
 
-    server.send(JSON.stringify({ type: 'state', you: null, match: this.snapshot() }));
+    await this.save();
+    this.send(server, { type: 'state', you: this.publicPlayer(player), match: this.snapshot() });
+    this.broadcast({ type: 'peer', player: this.publicPlayer(player) }, server);
+    await this.maybeStart();
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  publicPlayer(player) {
+    return {
+      name: player.name,
+      ready: player.ready,
+      score: player.score,
+      bpi: player.bpi,
+      done: player.done,
+      connected: player.connected
+    };
   }
 
   sockets() {
@@ -108,7 +179,7 @@ export class MatchRoom {
   playerFor(ws) {
     const attachment = ws.deserializeAttachment();
     if (!attachment) return null;
-    return this.match.players.find((p) => p.name === attachment.name) || null;
+    return this.match.players.find((p) => p.uid === attachment.uid) || null;
   }
 
   async webSocketMessage(ws, message) {
@@ -119,50 +190,15 @@ export class MatchRoom {
 
     await this.load();
 
-    if (msg.type === 'join') {
-      const name = cleanName(msg.player && msg.player.name);
-      if (!name) return this.send(ws, { type: 'error', code: 'name_required' });
+    const me = this.playerFor(ws);
+    if (!me) return this.send(ws, { type: 'error', code: 'ticket_required' });
 
-      const existing = this.match.players.find((p) => p.name === name);
-      if (existing) {
-        existing.connected = true;
-        ws.serializeAttachment({ name });
-        return this.send(ws, { type: 'state', you: existing, match: this.snapshot() });
-      }
-
-      const open = this.match.status === 'open' || this.match.status === 'countdown';
-      if (this.match.players.length >= MAX_PLAYERS && !open) {
-        return this.send(ws, { type: 'error', code: 'match_full' });
-      }
-      if (this.match.players.length >= MAX_PLAYERS) {
-        this.match.players = this.match.players.filter((p) => p.connected);
-      }
-      if (this.match.players.length >= MAX_PLAYERS) {
-        return this.send(ws, { type: 'error', code: 'match_full' });
-      }
-
-      const player = {
-        name,
-        avatar: String(msg.player.avatar || '').slice(0, 256),
-        ready: false,
-        score: 0,
-        bpi: 0,
-        done: false,
-        connected: true
-      };
-      this.match.players.push(player);
-      ws.serializeAttachment({ name });
-      await this.save();
-      this.send(ws, { type: 'state', you: player, match: this.snapshot() });
-      this.broadcast({ type: 'peer', player }, ws);
-      await this.maybeStart();
-      return;
+    if (msg.type === 'join' || msg.type === 'hello') {
+      return this.send(ws, { type: 'state', you: this.publicPlayer(me), match: this.snapshot() });
     }
 
-    const me = this.playerFor(ws);
-    if (!me) return this.send(ws, { type: 'error', code: 'join_first' });
-
     if (msg.type === 'ready') {
+      if (this.match.status !== 'open' && this.match.status !== 'countdown') return;
       me.ready = !!msg.ready;
       await this.save();
       this.broadcast({ type: 'state', match: this.snapshot() }, ws);
@@ -177,6 +213,7 @@ export class MatchRoom {
     }
 
     if (msg.type === 'progress') {
+      if (me.done) return;
       if (this.match.status === 'countdown') this.match.status = 'playing';
       me.score = score(msg.score);
       me.bpi = Math.max(0, Math.min(1000, Number(msg.bpi) || me.bpi));
@@ -191,6 +228,7 @@ export class MatchRoom {
     }
 
     if (msg.type === 'finish') {
+      if (me.done) return;
       me.score = score(msg.score);
       me.bpi = Math.max(0, Math.min(1000, Number(msg.bpi) || me.bpi));
       me.done = true;
@@ -214,6 +252,7 @@ export class MatchRoom {
         this.match.status = 'open';
         this.match.round = 0;
         this.match.startsAt = 0;
+        this.match.seed = newSeed();
         this.match.winner = null;
         await this.save();
         this.broadcast({ type: 'state', match: this.snapshot() });
@@ -237,6 +276,7 @@ export class MatchRoom {
       type: 'countdown',
       round: 1,
       startsAt: this.match.startsAt,
+      seed: this.match.seed,
       players: this.match.players.map((p) => ({ name: p.name, score: p.score }))
     });
   }
@@ -255,16 +295,9 @@ export class MatchRoom {
       status: this.match.status,
       round: this.match.round,
       startsAt: this.match.startsAt,
+      seed: this.match.seed,
       winner: this.match.winner,
-      players: this.match.players.map((p) => ({
-        name: p.name,
-        avatar: p.avatar,
-        ready: p.ready,
-        score: p.score,
-        bpi: p.bpi,
-        done: p.done,
-        connected: p.connected
-      }))
+      players: this.match.players.map((p) => this.publicPlayer(p))
     };
   }
 
@@ -272,7 +305,7 @@ export class MatchRoom {
     const attachment = ws.deserializeAttachment();
     if (!attachment) return;
     await this.load();
-    const player = this.match.players.find((p) => p.name === attachment.name);
+    const player = this.match.players.find((p) => p.uid === attachment.uid);
     if (!player) return;
 
     player.connected = false;
@@ -283,7 +316,7 @@ export class MatchRoom {
       this.match.startsAt = 0;
       for (const p of this.match.players) p.ready = false;
     } else if (this.match.status === 'open') {
-      this.match.players = this.match.players.filter((p) => p.name !== player.name);
+      this.match.players = this.match.players.filter((p) => p.uid !== player.uid);
     }
 
     await this.save();

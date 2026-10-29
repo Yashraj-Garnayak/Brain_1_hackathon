@@ -123,6 +123,9 @@
     updateAvatar: function (avatar) {
       return request('/api/profile', { method: 'PUT', body: { avatar: avatar } })
         .then(function (data) { if (data.user) setUser(data.user); return data.user; });
+    },
+    duelTicket: function () {
+      return request('/api/match/ticket', { method: 'POST', body: {} });
     }
   };
 
