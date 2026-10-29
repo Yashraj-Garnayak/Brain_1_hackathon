@@ -118,6 +118,9 @@
       var opts = typeof options === 'string' ? { by: options, limit: legacyLimit } : (options || {});
       return request(boardQuery(opts));
     },
+    rank: function () {
+      return request('/api/rank');
+    },
     profile: function (username, game) {
       return request('/api/users/' + encodeURIComponent(username) + '?game=' + encodeURIComponent(game || 'tile-rush'));
     },

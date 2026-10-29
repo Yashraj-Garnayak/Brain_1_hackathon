@@ -456,6 +456,9 @@
 
     var edit = $('profileEdit');
     if (edit) edit.hidden = !isSelf;
+
+    var logout = $('profileLogout');
+    if (logout) logout.hidden = !isSelf;
   }
 
   var seasonSeg = $('seasonMetrics');

@@ -12,7 +12,9 @@
  *
  * Protocol (client -> server):
  *   ready    { ready: true }
- *   progress { round, correct, score, bpi? }   // live opponent meter
+ *   progress { round, correct, wrong?, misses?, streak?, deal?, score, bpi? }
+ *   solved   { round, deal, score }             // this board was solved; advance both
+ *   churn    { round, deal }                    // board timed out; advance both
  *   finish   { score, bpi }
  *   emote    { id }                            // client sends these in breaks
  *   rematch  {}
@@ -23,7 +25,9 @@
  *   state      { match, you, spectator? }
  *   peer       { player }
  *   countdown  { startsAt, round, seed, players }
- *   progress   { from, round, correct, score }
+ *   progress   { from, round, correct, wrong, misses, streak, deal, score }
+ *   solved     { from, round, deal, score }     // lockstep board advance
+ *   churn      { from, round, deal }            // lockstep timeout advance
  *   emote      { from, id }
  *   result     { winner, players }
  *   peer_left  { player }
@@ -78,6 +82,7 @@ export class MatchRoom {
       winner: null,
       players: [],
       spectators: [],
+      resolved: {},
       kind: 'duel',
       code: null,
       updatedAt: Date.now()
@@ -86,6 +91,7 @@ export class MatchRoom {
     if (!Array.isArray(this.match.players)) this.match.players = [];
     if (!Array.isArray(this.match.spectators)) this.match.spectators = [];
     if (!this.match.kind) this.match.kind = 'duel';
+    if (!this.match.resolved || typeof this.match.resolved !== 'object') this.match.resolved = {};
 
     /* Kind is fixed when the object is first created. Watching a queue match
        by id must not relabel it as a room. */
@@ -157,7 +163,13 @@ export class MatchRoom {
         score: 0,
         bpi: 0,
         done: false,
-        connected: true
+        connected: true,
+        round: 0,
+        deal: 0,
+        correct: 0,
+        wrong: 0,
+        misses: 0,
+        streak: 0
       };
       match.players.push(player);
       return this.acceptPlayer(match, player, name, true);
@@ -220,7 +232,13 @@ export class MatchRoom {
       score: player.score,
       bpi: player.bpi,
       done: player.done,
-      connected: player.connected
+      connected: player.connected,
+      round: Number(player.round) || 0,
+      deal: Number(player.deal) || 0,
+      correct: Number(player.correct) || 0,
+      wrong: Number(player.wrong) || 0,
+      misses: Number(player.misses) || 0,
+      streak: Number(player.streak) || 0
     };
   }
 
@@ -251,6 +269,12 @@ export class MatchRoom {
 
   spectatorCount() {
     return this.match.spectators.filter((s) => s.connected).length;
+  }
+
+  scores() {
+    const out = {};
+    for (const player of this.match.players) out[player.name] = score(player.score);
+    return out;
   }
 
   playerFor(ws) {
@@ -307,21 +331,119 @@ export class MatchRoom {
     if (msg.type === 'progress') {
       if (me.done) return;
       if (this.match.status === 'countdown') this.match.status = 'playing';
-      me.score = score(msg.score);
       me.bpi = Math.max(0, Math.min(1000, Number(msg.bpi) || me.bpi));
+      me.round = Math.max(1, Math.min(ROUNDS, Number(msg.round) || me.round || 1));
+      if (msg.deal != null) me.deal = Math.max(0, Math.min(500, Number(msg.deal) || 0));
+      me.correct = Math.max(0, Math.min(500, Number(msg.correct) || 0));
+      me.wrong = Math.max(0, Math.min(500, Number(msg.wrong) || 0));
+      me.misses = Math.max(0, Math.min(500, Number(msg.misses) || 0));
+      me.streak = Math.max(0, Math.min(500, Number(msg.streak) || 0));
       this.broadcast({
         type: 'progress',
         from: me.name,
-        round: Math.max(1, Math.min(ROUNDS, Number(msg.round) || 1)),
-        correct: Math.max(0, Math.min(500, Number(msg.correct) || 0)),
-        score: me.score
+        round: me.round,
+        correct: me.correct,
+        wrong: me.wrong,
+        misses: me.misses,
+        streak: me.streak,
+        deal: me.deal,
+        score: score(me.score),
+        scores: this.scores()
       }, ws);
+      return;
+    }
+
+    /* A wrong tap is deducted by the client immediately; mirror the same
+       deduction on the server so the authoritative score stays in step. */
+    if (msg.type === 'penalty') {
+      if (me.done) return;
+      const amount = Math.max(0, Math.min(500, Number(msg.amount) || 0));
+      if (amount) me.score = score(me.score - amount);
+      await this.save();
+      this.broadcast({ type: 'scores', scores: this.scores() });
+      return;
+    }
+
+    /* Lockstep boards: the first correct read OR the first expired timer on a
+       board moves BOTH players to the next deterministic deal. A timeout is a
+       miss and awards no points; the answer is never revealed. */
+    if (msg.type === 'churn') {
+      if (me.done) return;
+      if (this.match.status === 'open' || this.match.status === 'countdown') this.match.status = 'playing';
+      const round = Math.max(1, Math.min(ROUNDS, Number(msg.round) || me.round || 1));
+      const deal = Math.max(0, Math.min(500, Number(msg.deal) || 0));
+      const key = round + ':' + deal;
+      if (!this.match.resolved) this.match.resolved = {};
+      if (this.match.resolved[key]) return;
+      this.match.resolved[key] = 'churn';
+
+      me.round = round;
+      me.deal = Math.max(Number(me.deal) || 0, deal + 1);
+      for (const p of this.match.players) {
+        if (p !== me && p.round === round) {
+          p.deal = Math.max(Number(p.deal) || 0, deal + 1);
+        }
+      }
+      await this.save();
+      this.broadcast({
+        type: 'churn',
+        from: me.name,
+        winner: null,
+        round,
+        deal,
+        scores: this.scores()
+      });
+      return;
+    }
+
+    if (msg.type === 'solved') {
+      if (me.done) return;
+      if (this.match.status === 'open' || this.match.status === 'countdown') this.match.status = 'playing';
+      const round = Math.max(1, Math.min(ROUNDS, Number(msg.round) || me.round || 1));
+      const deal = Math.max(0, Math.min(500, Number(msg.deal) || 0));
+      const key = round + ':' + deal;
+      if (!this.match.resolved) this.match.resolved = {};
+      if (this.match.resolved[key]) {
+        /* Someone else got there first. Tell the late claimant the current
+           scores so it can drop its pending solve without scoring twice. */
+        this.send(ws, { type: 'deal_closed', round, deal, scores: this.scores() });
+        return;
+      }
+      this.match.resolved[key] = me.name;
+
+      const points = Math.max(0, Math.min(20000, Number(msg.points) || 0));
+      me.score = score(me.score + points);
+      if (msg.bpi != null) me.bpi = Math.max(0, Math.min(1000, Number(msg.bpi) || me.bpi));
+
+      me.round = round;
+      me.deal = Math.max(Number(me.deal) || 0, deal + 1);
+      for (const p of this.match.players) {
+        /* Only advance a player who is already in this round. A player still
+           finishing the previous round keeps their own deal until they enter
+           the next one; otherwise a fast opponent would skip their board. */
+        if (p !== me && p.round === round) {
+          p.deal = Math.max(Number(p.deal) || 0, deal + 1);
+        }
+      }
+      await this.save();
+      this.broadcast({
+        type: 'solved',
+        from: me.name,
+        winner: me.name,
+        round,
+        deal,
+        points,
+        score: score(me.score),
+        scores: this.scores()
+      });
       return;
     }
 
     if (msg.type === 'finish') {
       if (me.done) return;
-      me.score = score(msg.score);
+      /* The server already owns the score from accepted solves/penalties.
+         Never let a client's final frame inflate a rejected board. */
+      me.score = score(me.score);
       me.bpi = Math.max(0, Math.min(1000, Number(msg.bpi) || me.bpi));
       me.done = true;
       if (this.match.players.length === MAX_PLAYERS && this.match.players.every((p) => p.done)) {
@@ -340,12 +462,19 @@ export class MatchRoom {
           p.score = 0;
           p.bpi = 0;
           p.done = false;
+          p.round = 0;
+          p.deal = 0;
+          p.correct = 0;
+          p.wrong = 0;
+          p.misses = 0;
+          p.streak = 0;
         }
         this.match.status = 'open';
         this.match.round = 0;
         this.match.startsAt = 0;
         this.match.seed = newSeed();
         this.match.winner = null;
+        this.match.resolved = {};
         await this.save();
         this.broadcast({ type: 'state', match: this.snapshot() });
       }
@@ -363,6 +492,7 @@ export class MatchRoom {
     this.match.status = 'countdown';
     this.match.round = 1;
     this.match.startsAt = Date.now() + 3000;
+    this.match.resolved = {};
     await this.save();
     this.broadcast({
       type: 'countdown',

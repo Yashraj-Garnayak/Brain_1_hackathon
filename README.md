@@ -28,17 +28,17 @@ A plain static server (`python3 -m http.server`) still works for the game loop, 
 
 Every run is the same fixed format, so BPI is comparable between players and across seasons:
 
-| Round | Grid | Clock | Churn | Cycle |
+| Round | Grid | Clock | Deck timer | Cycle |
 | --- | --- | --- | --- | --- |
-| 1 | 3×3 | 25 s | every 2.5 s | 10 correct |
-| 2 | 4×4 | 15 s | every 2.0 s | 8 correct |
-| 3 | 5×5 | 10 s | every 1.5 s | 6 correct |
+| 1 | 3×3 | 25 s | 2.5 s | 10 correct |
+| 2 | 4×4 | 15 s | 2.0 s | 8 correct |
+| 3 | 5×5 | 10 s | 1.5 s | 6 correct |
 
 - 3-second masked countdown before round 1: target and tiles are blurred until GO, so nobody can pre-scan.
 - **5-second breaks** between rounds show the round summary and a breathing prompt. This is also where 1v1 and room emotes live.
 - Tile size adapts to the viewport so 4×4 and 5×5 fit without scrolling on phones.
 - Total play time is 60 s (25 + 5 + 15 + 5 + 10); the countdown is extra.
-- One wrong tap costs 1 second, 30 points and your streak. An unanswered churn is a miss.
+- One wrong tap costs 1 second, 30 points and your streak in solo. In a duel it costs 30 points and locks you out of that deal until the timer expires or the opponent resolves it. An unanswered deck timer is a miss and churns to a new target; the answer is never revealed.
 
 Scoring per hit:
 
@@ -194,7 +194,7 @@ worker/              Cloudflare Worker + Durable Objects scaffold
 
 ## 1v1 duels
 
-**PLAY 1V1** on the menu queues you for a live head-to-head. Both players get the same three rounds, the same 5-second breaks, and the same ordered board sequence: when a duel deals its *n*-th board of a round, both clients generate that board from `HMAC-free hash(seed, round, n)`, so a player who is ahead sees the same layouts as a player who is behind. The server owns the countdown, relays live scores and decides the winner.
+**PLAY 1V1** on the menu queues you for a live head-to-head. Both players get the same three rounds, the same 5-second breaks, and the same ordered board sequence: when a duel deals its *n*-th board of a round, both clients generate that board from `HMAC-free hash(seed, round, n)`, so a player who is ahead sees the same layouts as a player who is behind. The first correct read or the first expired deck timer on a deal moves both boards; the slower player's late claim is rejected, so a board can never be scored twice. The server owns the countdown, the authoritative score, and the winner.
 
 1. The client asks Vercel for a ticket: `POST /api/match/ticket` returns a signed, 10-minute HMAC token (`MATCH_SECRET`) plus the Worker URLs.
 2. It polls `POST /api/match/queue` with that ticket. `QueueRoom` keys entries by account id, so two tabs of one account never pair together.
