@@ -156,7 +156,7 @@
   function load(start, end) {
     setStatus('Loading…');
     daysEl.innerHTML = '';
-    fetch(base + '/api/ultrahuman?start_epoch=' + start + '&end_epoch=' + end, { credentials: 'include' })
+    fetch(base + '/api/health?kind=ultrahuman&start_epoch=' + start + '&end_epoch=' + end, { credentials: 'include' })
       .then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (data) {
           if (!res.ok) throw new Error(data.error || 'Request failed (' + res.status + ').');

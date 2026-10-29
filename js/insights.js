@@ -91,7 +91,7 @@
   var state = { mode: 'week', period: periodOf('week', new Date()), range: null, selected: null, data: null };
 
   function request(p, withLast) {
-    var url = base + '/api/insights?from=' + dateKey(p.from) + '&to=' + dateKey(p.to) + '&today=' + TODAY + (withLast ? '&last=1' : '');
+    var url = base + '/api/health?kind=insights&from=' + dateKey(p.from) + '&to=' + dateKey(p.to) + '&today=' + TODAY + (withLast ? '&last=1' : '');
     return fetch(url, { credentials: 'include' }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (res.status === 401) throw new Error('Sign in on the game screen to see your insights.');

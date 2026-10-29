@@ -150,8 +150,8 @@ delta    = clamp(K × (actual − expected), −60, +60)
 | `GET` | `/api/users/:username?game=tile-rush` | Public profile (`self` is `null` for other players); every season carries averaged BPI axes, only the owner also gets run history |
 | `POST` | `/api/profile` | Update your avatar |
 | `GET` | `/api/ghost` | Your best run as a replayable 1 Hz score timeline |
-| `GET` | `/api/insights?from=…&to=…&today=…&last=1` | One week or month of runs with Ultrahuman ring metrics, period summary, what hurt, best hours; `last=1` adds the last played day |
-| `GET` | `/api/ultrahuman?start_epoch=…&end_epoch=…` | Ultrahuman daily metrics proxy (max 7 days) |
+| `GET` | `/api/health?kind=insights&from=…&to=…&today=…&last=1` | One week or month of runs with Ultrahuman ring metrics, period summary, what hurt, best hours; `last=1` adds the last played day |
+| `GET` | `/api/health?kind=ultrahuman&start_epoch=…&end_epoch=…` | Ultrahuman daily metrics proxy (max 7 days) |
 | `POST` | `/api/match/ticket` | Short-lived signed ticket + Worker URLs for 1v1 (body `{spectator:true}` mints a read-only ticket; guests need no account) |
 
 ## Data model
@@ -181,8 +181,7 @@ css/health.css       styles for the ring and insights pages
 api/auth/*.js        register / login / logout / me
 api/runs.js          ranked run submission (authoritative BPI + Elo)
 api/ghost.js         best-run ghost endpoint
-api/insights.js      week/month performance vs. ring metrics
-api/ultrahuman.js    Ultrahuman daily metrics proxy
+api/health.js        combined insights + Ultrahuman metrics endpoint
 api/leaderboard.js   layered weekly/seasonal boards
 api/users/[username].js  public profile
 api/profile.js       avatar update
