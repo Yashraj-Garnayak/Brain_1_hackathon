@@ -40,7 +40,10 @@ const MAX_PLAYERS = 2;
 const MAX_SPECTATORS = 20;
 const MAX_MESSAGE = 4096;
 const MAX_SCORE = 10_000_000;
-const EMOTES = new Set(['gg', 'wave', 'nice', 'oops', 'focus', 'rematch']);
+const LEGACY_EMOTES = new Set(['gg', 'wave', 'nice', 'oops', 'focus', 'rematch']);
+const MAX_EMOTE_EMOJI = 8;
+const MAX_EMOTE_TEXT = 24;
+const EMOTE_COOLDOWN_MS = 900;
 const ROUNDS = 3;
 
 const JSON_HEADERS = {
@@ -54,6 +57,15 @@ function json(data, status = 200) {
 
 function score(value) {
   return Math.max(0, Math.min(MAX_SCORE, Number(value) || 0));
+}
+
+/* Player-authored emotes are untrusted text: strip control characters and
+   markup punctuation, then cap the length. Empty pairs are ignored. */
+function cleanEmote(value, max) {
+  return String(value == null ? '' : value)
+    .replace(/[\u0000-\u001f\u007f<>]/g, '')
+    .trim()
+    .slice(0, max);
 }
 
 function newSeed() {
@@ -323,8 +335,18 @@ export class MatchRoom {
     }
 
     if (msg.type === 'emote') {
-      const id = String(msg.id || '');
-      if (EMOTES.has(id)) this.broadcast({ type: 'emote', from: me.name, id });
+      if (this.match.status === 'finished') return;
+      const now = Date.now();
+      if (now - (me.lastEmoteAt || 0) < EMOTE_COOLDOWN_MS) return;
+      let emoji = cleanEmote(msg.emoji, MAX_EMOTE_EMOJI);
+      let text = cleanEmote(msg.text, MAX_EMOTE_TEXT);
+      if (!emoji && !text) {
+        const id = String(msg.id || '');
+        if (!LEGACY_EMOTES.has(id)) return;
+        text = id.toUpperCase();
+      }
+      me.lastEmoteAt = now;
+      this.broadcast({ type: 'emote', from: me.name, emoji, text });
       return;
     }
 

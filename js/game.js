@@ -145,6 +145,7 @@
     settingsRankToggle: $('settingsRankToggle'), settingsTutorialBtn: $('settingsTutorialBtn'),
     settingsDevicesBtn: $('settingsDevicesBtn'), settingsDevicesNote: $('settingsDevicesNote'),
     settingsLogoutBtn: $('settingsLogoutBtn'), profileInsightsBtn: $('profileInsightsBtn'),
+    emoteEditor: $('emoteEditor'), emoteSaveBtn: $('emoteSaveBtn'),
     insightsScreen: $('insightsScreen'), insightsClose: $('insightsClose'),
     insightsEmpty: $('insightsEmpty'), insightsFeed: $('insightsFeed'),
     insightsConnectBtn: $('insightsConnectBtn'), insightsProfileBtn: $('insightsProfileBtn'),
@@ -1366,6 +1367,57 @@
     if (tab === 'devices') renderDevicesPanel();
   }
 
+  function renderEmoteEditor() {
+    if (!el.emoteEditor || !window.Emotes) return;
+    var list = Emotes.load();
+    el.emoteEditor.textContent = '';
+    list.forEach(function (preset, index) {
+      var row = document.createElement('div');
+      row.className = 'emote-row';
+
+      var num = document.createElement('span');
+      num.className = 'emote-num';
+      num.textContent = String(index + 1).padStart(2, '0');
+
+      var emoji = document.createElement('input');
+      emoji.className = 'emote-input emote-input-emoji';
+      emoji.type = 'text';
+      emoji.value = preset.emoji;
+      emoji.maxLength = 8;
+      emoji.autocomplete = 'off';
+      emoji.setAttribute('aria-label', 'Emote ' + (index + 1) + ' emoji');
+
+      var text = document.createElement('input');
+      text.className = 'emote-input emote-input-text';
+      text.type = 'text';
+      text.value = preset.text;
+      text.maxLength = 24;
+      text.autocomplete = 'off';
+      text.placeholder = 'Message';
+      text.setAttribute('aria-label', 'Emote ' + (index + 1) + ' message');
+
+      row.appendChild(num);
+      row.appendChild(emoji);
+      row.appendChild(text);
+      el.emoteEditor.appendChild(row);
+    });
+  }
+
+  function saveEmoteEditor() {
+    if (!el.emoteEditor || !window.Emotes) return;
+    var rows = el.emoteEditor.querySelectorAll('.emote-row');
+    var list = Array.prototype.map.call(rows, function (row) {
+      return {
+        emoji: row.querySelector('.emote-input-emoji').value,
+        text: row.querySelector('.emote-input-text').value
+      };
+    });
+    Emotes.save(list);
+    renderEmoteEditor();
+    if (window.Duel && Duel.refreshEmotes) Duel.refreshEmotes();
+    showToast('EMOTES', 'Saved for @' + (Account.user() ? Account.user().username : 'you') + ' on this device.');
+  }
+
   function renderSettings() {
     var user = Account && Account.user();
     if (!user) return;
@@ -1377,6 +1429,7 @@
       el.settingsRankToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     renderDevicesPanel();
+    renderEmoteEditor();
   }
 
   function goSection(section) {
@@ -2153,6 +2206,7 @@
   if (el.settingsTutorialBtn) el.settingsTutorialBtn.addEventListener('click', function () { openTutorial(0); });
   if (el.settingsDevicesBtn) el.settingsDevicesBtn.addEventListener('click', function () { setProfileTab('devices'); });
   if (el.settingsLogoutBtn) el.settingsLogoutBtn.addEventListener('click', function () { el.profileLogout.click(); });
+  if (el.emoteSaveBtn) el.emoteSaveBtn.addEventListener('click', saveEmoteEditor);
   if (el.profileInsightsBtn) el.profileInsightsBtn.addEventListener('click', openInsights);
   if (el.insightsClose) el.insightsClose.addEventListener('click', closeInsights);
   if (el.insightsConnectBtn) el.insightsConnectBtn.addEventListener('click', function () {

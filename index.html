@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20261030a" />
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -89,14 +89,7 @@
             <span class="break-sub" id="breakSub">3×3 · 25s</span>
             <span class="break-next" id="breakNext">NEXT 4×4 · 15s</span>
             <span class="break-note">Breathe. The next board is bigger.</span>
-            <div class="duel-emotes" id="duelEmotes" hidden>
-              <button type="button" data-emote="gg">GG</button>
-              <button type="button" data-emote="nice">NICE</button>
-              <button type="button" data-emote="focus">FOCUS</button>
-              <button type="button" data-emote="oops">OOPS</button>
-              <button type="button" data-emote="wave">WAVE</button>
-              <button type="button" data-emote="rematch">REMATCH?</button>
-            </div>
+            <div class="duel-emotes" id="duelEmotes" hidden aria-label="Emotes"></div>
           </div>
           <div class="fx" id="fx" aria-hidden="true"></div>
           <div class="toast" id="toast" aria-live="polite"></div>
@@ -520,6 +513,18 @@
             <button class="btn ghost compact" id="settingsLogoutBtn" type="button">LOG OUT</button>
           </div>
         </div>
+
+        <div class="settings-emotes">
+          <div class="profile-section-head">
+            <div>
+              <span class="micro">EMOTES</span>
+              <b class="profile-season-name">Your 8 multiplayer reactions</b>
+            </div>
+            <span class="profile-edge">only you see this editor</span>
+          </div>
+          <div class="emote-editor" id="emoteEditor"></div>
+          <button class="btn ghost compact" id="emoteSaveBtn" type="button">SAVE EMOTES</button>
+        </div>
       </div>
 
       <div id="profileTabDevices" hidden>
@@ -665,6 +670,8 @@
         <div class="duel-status" id="duelStatus">Ready when you are.</div>
       </div>
 
+      <div class="duel-emotes duel-emotes-lobby" id="duelEmotesLobby" hidden aria-label="Emotes"></div>
+
       <div class="watch-switch" id="watchSwitch" hidden aria-label="Choose which player to watch">
         <button type="button" class="watch-tab" data-slot="0">P1</button>
         <button type="button" class="watch-tab" data-slot="1">P2</button>
@@ -710,13 +717,14 @@
 
   <div class="duel-feed" id="duelFeed" aria-live="polite"></div>
 
-  <script src="js/shapes.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/background.js"></script>
-  <script src="shared/bpi.js"></script>
-  <script src="js/profile.js"></script>
-  <script src="js/account.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/duel.js"></script>
+  <script src="js/shapes.js?v=20261030a"></script>
+  <script src="js/audio.js?v=20261030a"></script>
+  <script src="js/background.js?v=20261030a"></script>
+  <script src="shared/bpi.js?v=20261030a"></script>
+  <script src="js/profile.js?v=20261030a"></script>
+  <script src="js/account.js?v=20261030a"></script>
+  <script src="js/emotes.js?v=20261030a"></script>
+  <script src="js/game.js?v=20261030a"></script>
+  <script src="js/duel.js?v=20261030a"></script>
 </body>
 </html>

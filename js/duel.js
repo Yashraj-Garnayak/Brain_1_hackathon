@@ -24,7 +24,8 @@
     primary: $('duelPrimary'), cancel: $('duelCancel'), ghostBtn: $('duelGhostBtn'),
     hud: $('duelHud'), hudYou: $('duelHudYou'), hudOpp: $('duelHudOpp'), hudName: $('duelHudName'),
     hudTag: $('duelHudTag'),
-    feed: $('duelFeed'), emotes: $('duelEmotes'), enter: $('duelBtn'), ghostEntry: $('ghostBtn'),
+    feed: $('duelFeed'), emotes: $('duelEmotes'), lobbyEmotes: $('duelEmotesLobby'),
+    enter: $('duelBtn'), ghostEntry: $('ghostBtn'),
     share: $('duelShare'), shareLink: $('duelShareLink'), shareCopy: $('duelShareCopy'),
     room: $('duelRoom'), roomInput: $('roomCodeInput'),
     watchBoards: $('watchBoards'), watchSwitch: $('watchSwitch'),
@@ -90,8 +91,41 @@
     els.hud.hidden = !on;
   }
 
+  function emoteList() {
+    if (window.Emotes) return Emotes.load();
+    return [];
+  }
+
+  function emoteButton(preset, index) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'emote-btn';
+    button.setAttribute('data-emote-index', String(index));
+    button.setAttribute('aria-label', preset.emoji + ' ' + preset.text);
+    var emoji = document.createElement('span');
+    emoji.className = 'emote-emoji';
+    emoji.textContent = preset.emoji;
+    var text = document.createElement('span');
+    text.className = 'emote-text';
+    text.textContent = preset.text;
+    button.appendChild(emoji);
+    button.appendChild(text);
+    return button;
+  }
+
+  function paintEmoteBars() {
+    var list = emoteList();
+    [els.emotes, els.lobbyEmotes].forEach(function (host) {
+      if (!host) return;
+      host.textContent = '';
+      list.forEach(function (preset, index) { host.appendChild(emoteButton(preset, index)); });
+    });
+  }
+
   function syncEmotes() {
-    els.emotes.hidden = !(state === 'playing' && mode === 'duel');
+    var live = (mode === 'duel' || mode === 'room') && !watching;
+    if (els.emotes) els.emotes.hidden = !(state === 'playing' && live);
+    if (els.lobbyEmotes) els.lobbyEmotes.hidden = !(state === 'matched' && live);
   }
 
   function setState(next) {
@@ -463,6 +497,7 @@
     if (!entry) return;
     mode = 'room';
     watching = false;
+    paintEmoteBars();
     roomCode = entry.code;
     matchId = entry.id;
     watchPlayers = [];
@@ -751,7 +786,7 @@
 
     if (msg.type === 'emote') {
       if (msg.from === me) return;
-      bubble(msg.from || 'OPPONENT', msg.id);
+      bubble(msg.from || 'OPPONENT', msg.emoji, msg.text, msg.id);
       return;
     }
 
@@ -1103,16 +1138,22 @@
   }
 
   function breakStart() {
-    if (state === 'playing' && mode === 'duel') els.emotes.hidden = false;
+    if (state === 'playing' && (mode === 'duel' || mode === 'room')) els.emotes.hidden = false;
   }
 
-  function bubble(name, id) {
-    var label = String(id || '').replace(/_/g, ' ').toUpperCase();
+  function bubble(name, emoji, text, id) {
+    var face = String(emoji || '').trim();
+    var label = String(text || '').trim();
+    if (!label && id) label = String(id).replace(/_/g, ' ');
+    if (!label && !face) return;
     var node = document.createElement('div');
     node.className = 'duel-bubble';
-    node.textContent = String(name).toUpperCase() + ' · ' + label;
+    var who = document.createElement('b');
+    who.textContent = String(name).toUpperCase();
+    node.appendChild(who);
+    node.appendChild(document.createTextNode(' ' + (face ? face + ' ' : '') + label));
     els.feed.appendChild(node);
-    setTimeout(function () { node.remove(); }, 2600);
+    setTimeout(function () { node.remove(); }, 3000);
   }
 
   /* ---------- actions ---------- */
@@ -1202,6 +1243,7 @@
     if (state !== 'idle') return;
     mode = 'duel';
     watching = false;
+    paintEmoteBars();
     roomCode = '';
     matchId = '';
     clearInviteParam();
@@ -1244,12 +1286,18 @@
   });
   els.shareCopy.addEventListener('click', copyInvite);
 
-  els.emotes.addEventListener('click', function (event) {
-    var button = event.target.closest ? event.target.closest('button[data-emote]') : null;
+  function onEmoteClick(event) {
+    var button = event.target.closest ? event.target.closest('button[data-emote-index]') : null;
     if (!button) return;
-    var id = button.getAttribute('data-emote');
-    if (send({ type: 'emote', id: id })) bubble('YOU', id);
-  });
+    var preset = emoteList()[Number(button.getAttribute('data-emote-index'))];
+    if (!preset) return;
+    if (send({ type: 'emote', emoji: preset.emoji, text: preset.text })) {
+      bubble('YOU', preset.emoji, preset.text);
+    }
+  }
+  if (els.emotes) els.emotes.addEventListener('click', onEmoteClick);
+  if (els.lobbyEmotes) els.lobbyEmotes.addEventListener('click', onEmoteClick);
+  paintEmoteBars();
 
   /* Invite links: /?room=CODE opens this lobby with the code filled in. */
   var invited = new URLSearchParams(location.search).get('room');
@@ -1259,6 +1307,7 @@
   }
 
   window.Duel = {
+    refreshEmotes: function () { paintEmoteBars(); syncEmotes(); },
     open: open,
     ghost: goGhost,
     openRoom: openRoom,
