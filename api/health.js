@@ -9,7 +9,7 @@
 
 const { allow, json, fail, httpError } = require('../lib/http');
 const { currentUser } = require('../lib/auth');
-const { insights } = require('../lib/insights');
+const { insights, syncRingPeriod } = require('../lib/insights');
 const { fetchDailyMetrics } = require('../lib/ultrahuman');
 
 const MAX_SPAN_DAYS = 62;
@@ -44,6 +44,16 @@ async function insightsHandler(req, res, url) {
   if (from > to) throw httpError(400, 'from must be on or before to.');
   if ((Date.parse(to) - Date.parse(from)) / 86400000 >= MAX_SPAN_DAYS) {
     throw httpError(400, `A period can cover at most ${MAX_SPAN_DAYS} days.`);
+  }
+
+  /* The week/month controls send sync=1 so the ring days for that exact
+     epoch range are refreshed before the runs are joined to them. */
+  if (url.searchParams.get('sync') === '1') {
+    try {
+      await syncRingPeriod(user.id, from, to, Number(url.searchParams.get('tzOffset')) || 0);
+    } catch (err) {
+      console.error('ring period sync failed', err.message);
+    }
   }
 
   const data = await insights(user.id, { from, to, today, withLast: url.searchParams.get('last') === '1' });
