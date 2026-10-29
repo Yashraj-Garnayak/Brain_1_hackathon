@@ -895,6 +895,9 @@
           '<span>R' + round + ' · ' + size + '×' + size + '</span>' +
           '<span>' + accLabel + ' acc</span>' +
           '<span>#' + (deal + 1) + '</span>' +
+          '<span>\u00d7' + (p ? p.streak : 0) + ' streak</span>' +
+          '<span>' + (p ? p.correct : 0) + ' hits</span>' +
+          '<span>' + (p ? p.misses : 0) + ' misses</span>' +
           (p && p.done ? '<span class="watch-done">DONE</span>' : '') +
         '</div>' +
         '<div class="watch-goal">' + goal + '</div>' +
