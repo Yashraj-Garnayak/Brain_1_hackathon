@@ -141,7 +141,7 @@
     sectionBar: $('sectionBar'),
     profileTabs: $('profileTabs'), profileTabProfile: $('profileTabProfile'),
     profileTabSettings: $('profileTabSettings'), profileTabDevices: $('profileTabDevices'),
-    settingsAccount: $('settingsAccount'), settingsStats: $('settingsStats'),
+    settingsAccount: $('settingsAccount'),
     settingsRankToggle: $('settingsRankToggle'), settingsTutorialBtn: $('settingsTutorialBtn'),
     settingsDevicesBtn: $('settingsDevicesBtn'), settingsDevicesNote: $('settingsDevicesNote'),
     settingsLogoutBtn: $('settingsLogoutBtn'), profileInsightsBtn: $('profileInsightsBtn'),
@@ -1324,7 +1324,6 @@
         : d.ultrahuman ? 'Ultrahuman linked on this device.'
         : 'No wearable linked yet.';
     }
-    if (el.profileInsightsBtn) el.profileInsightsBtn.disabled = !hasDevice();
   }
 
   function toggleDevice(key) {
@@ -1347,13 +1346,8 @@
   }
 
   function openInsights() {
-    if (!hasDevice()) {
-      openProfile(Account && Account.user() ? Account.user().username : null, 'tile-rush', 'devices');
-      showToast('INSIGHTS', 'Link a ring first \u2014 opening connected devices.');
-      return;
-    }
-    renderInsights();
-    showScreen(el.insightsScreen);
+    var api = params.get('api');
+    window.location.href = 'insights.html' + (api ? '?api=' + encodeURIComponent(api) : '');
   }
 
   function setProfileTab(tab) {
@@ -1376,13 +1370,6 @@
     var user = Account && Account.user();
     if (!user) return;
     if (el.settingsAccount) el.settingsAccount.textContent = '@' + user.username + ' \u00b7 ' + (user.title || 'DRIFTER');
-    if (el.settingsStats) {
-      el.settingsStats.innerHTML =
-        '<div><span class="micro">BEST BPI</span><b>' + (user.bestBpi || 0) + '</b></div>' +
-        '<div><span class="micro">BEST SCORE</span><b>' + fmt(user.bestScore || 0) + '</b></div>' +
-        '<div><span class="micro">RATING</span><b>' + (user.rating || 1000) + '</b></div>' +
-        '<div><span class="micro">RUNS</span><b>' + (user.games || 0) + '</b></div>';
-    }
     var on = homeRankEnabled();
     if (el.settingsRankToggle) {
       el.settingsRankToggle.textContent = on ? 'ON' : 'OFF';
