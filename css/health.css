@@ -400,3 +400,37 @@ button.in-cal-cell:hover { border-color: var(--line-strong); }
 .in-ring-grid .hm-tile .micro { display: flex; align-items: center; gap: 2px; }
 .in-ring-grid .hm-tile b { font-size: 20px; }
 .in-ring-grid .in-ask { margin-left: 4px; }
+
+/* Two-tab switch between the run insights and the ring's daily metrics. */
+.health-tabs {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #171513;
+}
+.health-tab {
+  flex: 1;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-align: center;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--muted);
+}
+.health-tab:hover:not(.active) { color: var(--ink); }
+.health-tab.active {
+  background: var(--ink);
+  color: #0b0a09;
+  font-weight: 700;
+}
+@media (max-width: 560px) {
+  .health-tabs { width: 100%; }
+  .health-tab { padding: 8px 6px; font-size: 9px; }
+}

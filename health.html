@@ -15,7 +15,11 @@
 <body class="health-page">
   <main class="health">
     <header class="health-head">
-      <nav class="health-nav"><a class="health-back" href="./">← TILE RUSH</a><a class="health-back" href="insights.html">INSIGHTS →</a></nav>
+      <nav class="health-nav"><a class="health-back" href="./">← TILE RUSH</a></nav>
+      <div class="health-tabs" role="tablist" aria-label="Health views">
+        <a class="health-tab" href="insights.html" role="tab" aria-selected="false">INSIGHTS</a>
+        <a class="health-tab active" href="health.html" role="tab" aria-selected="true">HEALTH METRICS</a>
+      </div>
       <h1>Health metrics</h1>
       <p class="health-sub" id="syncInfo">Ultrahuman ring · loading…</p>
     </header>
