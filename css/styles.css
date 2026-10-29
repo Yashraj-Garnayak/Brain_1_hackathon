@@ -2673,6 +2673,7 @@ body.duel-on .section-bar { display: none; }
 @media (min-width: 920px) {
   .intro-card {
     width: min(1760px, 100%);
+    min-height: calc(100dvh - 44px);
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
     column-gap: 44px;
