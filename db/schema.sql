@@ -58,6 +58,10 @@ alter table runs add column if not exists result text;
 -- Cumulative score sampled once per second, used to replay a run as a ghost.
 alter table runs add column if not exists timeline jsonb;
 
+-- Backfill season/week keys for runs recorded before seasons shipped.
+update runs set season_key = to_char(created_at at time zone 'UTC', 'YYYY-MM') where season_key is null;
+update runs set week_key = to_char(created_at at time zone 'UTC', 'IYYY-"W"IW') where week_key is null;
+
 create index if not exists runs_user_idx on runs (user_id, created_at desc);
 create index if not exists runs_user_game_idx on runs (user_id, game_id, created_at desc);
 create index if not exists runs_game_season_bpi_idx on runs (game_id, season_key, bpi desc);

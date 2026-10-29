@@ -485,6 +485,10 @@
       var key = row.getAttribute('data-season');
       openSeason = openSeason === key ? null : key;
       if (lastProfile) renderSeasons(lastProfile, lastSelf);
+      if (openSeason) {
+        var panel = seasonList.querySelector('.ps-detail');
+        if (panel && panel.scrollIntoView) panel.scrollIntoView({ block: 'nearest' });
+      }
     });
   }
 
