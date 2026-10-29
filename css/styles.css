@@ -2672,7 +2672,7 @@ body.duel-on .section-bar { display: none; }
 /* ---------- home: use the width ---------- */
 @media (min-width: 920px) {
   .intro-card {
-    width: min(1000px, 100%);
+    width: min(1760px, 100%);
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
     column-gap: 44px;
@@ -2718,3 +2718,90 @@ body.duel-on .section-bar { display: none; }
   .settings-row .mini-toggle, .settings-row .btn { align-self: stretch; }
   .insights-actions { flex-direction: column; }
 }
+
+/* ------------------------------------------------------------------ */
+/* CRED-inspired warm charcoal theme                                   */
+/* ------------------------------------------------------------------ */
+:root {
+  --bg: #0b0a09;
+  --ink: #f4f1ea;
+  --muted: #a8a29a;
+  --dim: #6f6a63;
+  --line: rgba(244, 241, 234, .10);
+  --line-strong: rgba(244, 241, 234, .20);
+  --panel: rgba(23, 21, 19, .82);
+  --accent: #4ade80;
+  --accent-2: #2dd4bf;
+  --hot: #ff6369;
+  --warn: #fbbf24;
+}
+
+html { background: var(--bg); }
+body {
+  background:
+    radial-gradient(900px 600px at 12% -10%, rgba(74, 222, 128, .10), transparent 60%),
+    radial-gradient(1000px 700px at 92% 8%, rgba(45, 212, 191, .09), transparent 62%),
+    radial-gradient(900px 800px at 50% 120%, rgba(74, 222, 128, .05), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+.title em {
+  background: linear-gradient(100deg, var(--accent), var(--accent-2) 58%, #86efac);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.intro-title {
+  border-color: rgba(244, 241, 234, .25);
+  background: var(--ink);
+  color: #0b0a09;
+  font-weight: 700;
+}
+
+.btn.primary {
+  background: var(--ink);
+  color: #0b0a09;
+  box-shadow: 0 16px 44px -18px rgba(0, 0, 0, .75);
+}
+.btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 54px -18px rgba(0, 0, 0, .9);
+}
+.btn.primary span { color: #0b0a09; opacity: .5; }
+.btn.ghost {
+  background: #171513;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.btn.ghost:hover { background: #1d1a17; border-color: rgba(244, 241, 234, .3); }
+
+.screen-card {
+  background: linear-gradient(170deg, rgba(29, 26, 23, .99), rgba(11, 10, 9, .995));
+  border-color: rgba(244, 241, 234, .10);
+  box-shadow: 0 50px 120px rgba(0, 0, 0, .78), inset 0 1px 0 rgba(244, 241, 234, .06);
+}
+.card, .goal, .board-row, .watch-board, .watch-metrics {
+  background: linear-gradient(170deg, #1d1a17, #12100e);
+  border-color: var(--line);
+}
+.tile {
+  background:
+    linear-gradient(158deg, rgba(244, 241, 234, .05), rgba(244, 241, 234, .01)),
+    #14110f;
+  border-color: var(--line);
+}
+.section-bar {
+  background: rgba(23, 21, 19, .94);
+  border-color: var(--line-strong);
+}
+.intro-card > .intro-actions .intro-meta div { background: #171513; }
+.home-rank, .over-rank {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(74, 222, 128, .09), transparent 55%),
+    #171513;
+}
+.duel-hud, .duel-feed .duel-bubble { background: rgba(23, 21, 19, .94); }
+body.spectating .duel-screen { background: rgba(11, 10, 9, .96); }
+body.spectating .duel-card { background: linear-gradient(170deg, #1d1a17, #0b0a09); }
