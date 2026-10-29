@@ -1,0 +1,26 @@
+name = "tile-rush"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# Static client. Run `npm run worker:assets` from the repo root before
+# `wrangler dev`/`wrangler deploy`; the script copies index.html, css/, js/ and
+# shared/ into ./public so no source, env files or node_modules are uploaded.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[durable_objects]
+bindings = [
+  { name = "MATCH", class_name = "MatchRoom" },
+  { name = "QUEUE", class_name = "QueueRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MatchRoom", "QueueRoom"]
+
+[vars]
+# REST API still lives on Vercel until it is ported to the Worker.
+API_ORIGIN = "https://tile-rush.uday.live"

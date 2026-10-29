@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#05070d" />
   <title>TILE RUSH — adaptive reflex trainer</title>
-  <meta name="description" content="A 3x3 reflex game. Find the matching glyph before the board reshuffles. The clock never stops." />
+  <meta name="description" content="A three-round reflex game: 3×3, 4×4, 5×5. Find the matching glyph before the board reshuffles. Track your BPI, titles and regional rank." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -28,7 +28,7 @@
 
       <div class="clock" id="clock">
         <span class="clock-label">TIME</span>
-        <b id="timeValue">30.0</b>
+        <b id="timeValue">25.0</b>
         <span class="clock-unit">s</span>
       </div>
 
@@ -69,18 +69,26 @@
         </div>
 
         <div class="cycle-row">
+          <span class="micro round-tag">ROUND <b id="round">1/3</b></span>
           <span class="micro">CYCLE <b id="cycleNum">0/10</b></span>
           <div class="pips" id="pips" aria-hidden="true"></div>
           <span class="micro tier-tag">TIER <b id="tier">0</b></span>
         </div>
 
         <div class="board">
-          <div class="grid" id="grid" role="group" aria-label="Nine tiles"></div>
+          <div class="grid" id="grid" role="group" aria-label="Tile board"></div>
           <div class="countdown" id="countdown" aria-live="assertive" aria-label="Starting in 3 seconds">
             <span class="countdown-label">GET READY</span>
             <b id="countdownNum" data-n="3">3</b>
             <span class="countdown-bar" aria-hidden="true"><i></i></span>
             <span class="countdown-note">Timer starts at GO</span>
+          </div>
+          <div class="round-break" id="roundBreak" aria-live="assertive">
+            <span class="countdown-label" id="breakTitle">ROUND 1 CLEAR</span>
+            <b class="break-num" id="breakNum">5</b>
+            <span class="break-sub" id="breakSub">3×3 · 25s</span>
+            <span class="break-next" id="breakNext">NEXT 4×4 · 15s</span>
+            <span class="break-note">Breathe. The next board is bigger.</span>
           </div>
           <div class="fx" id="fx" aria-hidden="true"></div>
           <div class="toast" id="toast" aria-live="polite"></div>
@@ -88,7 +96,7 @@
         </div>
 
         <div class="board-foot">
-          <span class="hint"><kbd>1</kbd>–<kbd>9</kbd> tap tiles · <kbd>M</kbd> mute</span>
+          <span class="hint">tap tiles · <kbd>1</kbd>–<kbd>9</kbd> round one · <kbd>M</kbd> mute</span>
           <span class="streak" id="streakWrap">STREAK <b id="streak">0</b></span>
         </div>
       </section>
@@ -142,19 +150,20 @@
     <div class="screen-card intro-card">
       <span class="kicker">ADAPTIVE REFLEX TRAINER</span>
       <h1 class="title">TILE <em>RUSH</em></h1>
-      <p class="lede">One target. Nine impostors. Thirty seconds that never stop.</p>
+      <span class="intro-title" id="introTitle">DRIFTER</span>
+      <p class="lede">One target. Three boards. Sixty seconds that never stop.</p>
 
       <div class="intro-body">
         <div class="intro-motif" aria-hidden="true">
           <div class="motif-grid">
             <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
           </div>
-          <span>3 × 3 / empty</span>
+          <span>3 × 3 → 5 × 5</span>
         </div>
         <ol class="rules">
-          <li><span><b>MATCH</b> the target shape and colour before the board reshuffles.</span></li>
-          <li><span><b>CLEAR</b> ten hits to bank bonus seconds — the faster the cycle, the bigger the bank.</span></li>
-          <li><span><b>MISS</b> and the game leans in: weak shapes return, decoys get closer, the tempo climbs.</span></li>
+          <li><span><b>THREE ROUNDS.</b> 3×3 for 25s, 4×4 for 15s, 5×5 for 10s. Five seconds between each.</span></li>
+          <li><span><b>MATCH</b> the target before the board reshuffles. Round one turns every 2.5s, then 2s, then 1.5s.</span></li>
+          <li><span><b>CLEAR</b> a cycle to bank points and raise the tier. The clock never pauses.</span></li>
         </ol>
       </div>
 
@@ -162,6 +171,7 @@
         <button class="btn primary" id="startBtn" type="button">START RUN <span>↵</span></button>
         <div class="intro-meta">
           <div><span class="micro">PERSONAL BEST</span><b id="introBest">0</b></div>
+          <div><span class="micro">BPI</span><b id="introBpi">0</b></div>
           <div><span class="micro">RATING</span><b id="introElo">1000</b></div>
           <div><span class="micro">RUNS</span><b id="introGames">0</b></div>
         </div>
@@ -187,6 +197,19 @@
       <div class="over-score">
         <span class="micro">FINAL SCORE</span>
         <b id="finalScore">0</b>
+      </div>
+
+      <div class="bpi-block">
+        <div class="bpi-radar" id="overRadar" aria-hidden="true"></div>
+        <div class="bpi-copy">
+          <div class="bpi-head">
+            <span class="micro">BPI</span>
+            <b id="finalBpi">0</b>
+            <span class="bpi-title" id="finalTitle">DRIFTER</span>
+            <span class="bpi-arch" id="finalArchetype">ALL-ROUNDER</span>
+          </div>
+          <p class="bpi-feedback" id="overFeedback"></p>
+        </div>
       </div>
 
       <div class="over-grid">
@@ -256,15 +279,29 @@
     <div class="screen-card board-card" role="dialog" aria-modal="true" aria-labelledby="boardTitle">
       <div class="board-head">
         <div>
-          <span class="kicker">WORLDWIDE</span>
+          <span class="kicker" id="boardScopeLabel">WORLDWIDE</span>
           <h2 class="board-title" id="boardTitle">LEADERBOARD</h2>
+          <span class="board-period" id="boardPeriodLabel">THIS SEASON</span>
         </div>
         <button class="modal-x" id="boardClose" type="button" aria-label="Close">×</button>
       </div>
 
-      <div class="board-tabs" role="tablist" aria-label="Leaderboard sort">
-        <button class="board-tab active" type="button" role="tab" data-by="score" aria-selected="true">HIGH SCORE</button>
-        <button class="board-tab" type="button" role="tab" data-by="rating" aria-selected="false">RATING</button>
+      <div class="board-filters">
+        <div class="seg" id="boardScopes" role="group" aria-label="Region">
+          <button class="seg-btn active" type="button" data-scope="global" aria-pressed="true">GLOBAL</button>
+          <button class="seg-btn" type="button" data-scope="country" aria-pressed="false">COUNTRY</button>
+          <button class="seg-btn" type="button" data-scope="region" aria-pressed="false">REGION</button>
+        </div>
+        <div class="seg" id="boardPeriods" role="group" aria-label="Period">
+          <button class="seg-btn" type="button" data-period="week" aria-pressed="false">WEEK</button>
+          <button class="seg-btn active" type="button" data-period="season" aria-pressed="true">SEASON</button>
+          <button class="seg-btn" type="button" data-period="all" aria-pressed="false">ALL TIME</button>
+        </div>
+        <div class="seg" id="boardMetrics" role="group" aria-label="Metric">
+          <button class="seg-btn active" type="button" data-by="bpi" aria-pressed="true">BPI</button>
+          <button class="seg-btn" type="button" data-by="score" aria-pressed="false">SCORE</button>
+          <button class="seg-btn" type="button" data-by="rating" aria-pressed="false">RATING</button>
+        </div>
       </div>
 
       <div class="board-stats">
@@ -285,9 +322,90 @@
     </div>
   </div>
 
+  <!-- PLAYER PROFILE -->
+  <div class="screen modal-screen" id="profileScreen">
+    <div class="screen-card profile-card" role="dialog" aria-modal="true" aria-labelledby="profileName">
+      <button class="modal-x" id="profileClose" type="button" aria-label="Close">×</button>
+
+      <div class="profile-head">
+        <div class="profile-avatar" id="profileAvatar">?</div>
+        <div class="profile-id">
+          <span class="kicker">PLAYER PROFILE <i class="online-dot" id="profileOnline" hidden></i></span>
+          <h2 class="profile-name" id="profileName">@player</h2>
+          <div class="profile-badges">
+            <span class="profile-title" id="profileTitle">DRIFTER</span>
+            <span class="profile-arch" id="profileArchetype">—</span>
+          </div>
+          <span class="profile-meta" id="profileMeta"></span>
+        </div>
+      </div>
+
+      <div class="profile-edit" id="profileEdit" hidden>
+        <button class="linkish" id="avatarBtn" type="button">change photo</button>
+        <input id="avatarInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+        <span class="profile-hint" id="avatarHint">PNG / JPEG / WebP · 120 KB max</span>
+      </div>
+
+      <div class="profile-hero">
+        <div><span class="micro">BEST BPI</span><b id="profileBestBpi">0</b></div>
+        <div><span class="micro">BEST SCORE</span><b id="profileBestScore">0</b></div>
+        <div><span class="micro">RUNS</span><b id="profileGames">0</b></div>
+        <div><span class="micro">SEASON RANK</span><b id="profileRank">—</b></div>
+      </div>
+
+      <div class="profile-section-head">
+        <div>
+          <span class="micro">CURRENT SEASON</span>
+          <b class="profile-season-name" id="profileSeasonName">—</b>
+        </div>
+        <select id="profileGameSelect" class="profile-game" aria-label="Game"></select>
+      </div>
+
+      <div class="ps-grid" id="profileSeasonStats"></div>
+
+      <div class="profile-split">
+        <div class="profile-fingerprint">
+          <div class="profile-fingerprint-head">
+            <span class="micro">FINGERPRINT</span>
+            <span class="profile-edge">0–1000 BPI</span>
+          </div>
+          <div class="profile-radar" id="profileRadar"></div>
+          <p class="profile-feedback" id="profileFeedback"></p>
+        </div>
+        <div class="profile-seasons-wrap">
+          <div class="ps-head">
+            <span class="micro">SEASON HISTORY</span>
+            <div class="seg ps-seg" id="seasonMetrics" role="group" aria-label="Season metric">
+              <button class="seg-btn active" type="button" data-metric="bpi" aria-pressed="true">BPI</button>
+              <button class="seg-btn" type="button" data-metric="accuracy" aria-pressed="false">ACC</button>
+              <button class="seg-btn" type="button" data-metric="activity" aria-pressed="false">RUNS</button>
+              <button class="seg-btn" type="button" data-metric="rank" aria-pressed="false">RANK</button>
+            </div>
+          </div>
+          <div class="ps-summary" id="profileSeasonSummary"></div>
+          <div class="ps-trend" id="profileSeasonTrend"></div>
+          <p class="ps-insight" id="profileSeasonInsight"></p>
+          <div class="profile-seasons" id="profileSeasons"></div>
+        </div>
+      </div>
+
+      <div class="profile-improve" id="profileImprove" hidden>
+        <span class="micro">YOUR IMPROVEMENT <em>only visible to you</em></span>
+        <div class="ps-deltas" id="profileImproveList"></div>
+      </div>
+
+      <div class="board-foot profile-foot">
+        <button class="linkish" id="profileBoardBtn" type="button">leaderboard</button>
+        <span>BPI is a training fingerprint, not an IQ score.</span>
+      </div>
+    </div>
+  </div>
+
   <script src="js/shapes.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/background.js"></script>
+  <script src="shared/bpi.js"></script>
+  <script src="js/profile.js"></script>
   <script src="js/account.js"></script>
   <script src="js/game.js"></script>
 </body>

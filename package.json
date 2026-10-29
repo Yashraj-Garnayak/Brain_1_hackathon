@@ -2,12 +2,19 @@
   "name": "tile-rush",
   "version": "1.1.0",
   "private": true,
-  "description": "Adaptive 3x3 reflex trainer with accounts and a global leaderboard",
+  "description": "Adaptive three-round reflex trainer with BPI, accounts, seasons and leaderboards",
   "scripts": {
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "worker:assets": "node scripts/build-worker-assets.mjs",
+    "worker:dev": "npm run worker:assets && wrangler dev --config worker/wrangler.toml",
+    "worker:deploy": "npm run worker:assets && wrangler deploy --config worker/wrangler.toml",
+    "worker:check": "npm run worker:assets && wrangler deploy --dry-run --config worker/wrangler.toml"
   },
   "dependencies": {
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.155.0"
   },
   "engines": {
     "node": ">=20"

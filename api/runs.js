@@ -3,7 +3,23 @@
 const { allow, readJson, json, fail } = require('../lib/http');
 const { currentUser } = require('../lib/auth');
 const { recordRun, publicUser } = require('../lib/users');
-const { clamp } = require('../lib/elo');
+const { geoFromRequest } = require('../lib/geo');
+const { keysFor } = require('../lib/season');
+const bpi = require('../shared/bpi');
+
+function cleanRounds(input) {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 4).map((round, index) => ({
+    round: Number(round && round.round) || index + 1,
+    size: Math.max(3, Math.min(6, Number(round && round.size) || 3)),
+    duration: Math.max(1, Math.min(60, Number(round && round.duration) || 0)),
+    score: Math.max(0, Math.round(Number(round && round.score) || 0)),
+    correct: Math.max(0, Math.round(Number(round && round.correct) || 0)),
+    wrong: Math.max(0, Math.round(Number(round && round.wrong) || 0)),
+    misses: Math.max(0, Math.round(Number(round && round.misses) || 0)),
+    maxTier: Math.max(0, Math.round(Number(round && round.maxTier) || 0))
+  }));
+}
 
 module.exports = async function handler(req, res) {
   if (!allow(req, res, ['POST'])) return;
@@ -14,8 +30,11 @@ module.exports = async function handler(req, res) {
     const body = await readJson(req);
     const score = Math.round(Number(body.score));
     const tier = Math.round(Number(body.tier));
-    const accuracy = Number(body.accuracy);
-    const avgRt = Math.round(Number(body.avgRt));
+    const submittedAccuracy = Number(body.accuracy);
+    const submittedRt = Math.round(Number(body.avgRt));
+    const misses = Math.round(Number(body.misses) || 0);
+    const cycles = Math.round(Number(body.cycles) || 0);
+    const gameId = body.gameId === 'tile-rush' ? 'tile-rush' : 'tile-rush';
 
     if (!Number.isFinite(score) || score < 0 || score > 1000000) {
       return json(res, 400, { error: 'Invalid score.' });
@@ -23,24 +42,66 @@ module.exports = async function handler(req, res) {
     if (!Number.isFinite(tier) || tier < 0 || tier > 100) {
       return json(res, 400, { error: 'Invalid tier.' });
     }
-    if (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 1) {
+    if (!Number.isFinite(submittedAccuracy) || submittedAccuracy < 0 || submittedAccuracy > 1) {
       return json(res, 400, { error: 'Invalid accuracy.' });
     }
-    if (!Number.isFinite(avgRt) || avgRt < 0 || avgRt > 60000) {
+    if (!Number.isFinite(submittedRt) || submittedRt < 0 || submittedRt > 60000) {
       return json(res, 400, { error: 'Invalid reaction time.' });
     }
+    if (misses < 0 || misses > 400) return json(res, 400, { error: 'Invalid miss count.' });
+    if (cycles < 0 || cycles > 100) return json(res, 400, { error: 'Invalid cycle count.' });
+
+    const trials = Array.isArray(body.trials) ? body.trials.slice(0, 400) : [];
+    const rounds = cleanRounds(body.rounds);
+    const metrics = bpi.compute({
+      trials, misses, cycles, maxTier: tier, score
+    });
+
+    const accuracy = trials.length
+      ? Math.max(0, Math.min(1, metrics.stats.accuracy))
+      : Math.max(0, Math.min(1, submittedAccuracy));
+    const avgRt = trials.length && metrics.stats.medianRt
+      ? metrics.stats.medianRt
+      : submittedRt;
+
+    const geo = geoFromRequest(req);
+    const keys = keysFor(new Date());
 
     const result = await recordRun({
       userId: user.id,
       score,
       tier,
-      accuracy: clamp(accuracy, 0, 1),
-      avgRt
+      accuracy,
+      avgRt,
+      bpi: metrics.bpi,
+      metrics,
+      rounds,
+      gameId,
+      seasonKey: keys.seasonKey,
+      weekKey: keys.weekKey,
+      country: geo.country || user.country || null,
+      region: geo.region || user.region || null,
+      stats: {
+        correct: metrics.stats.correct,
+        attempts: metrics.stats.attempts,
+        rtSum: metrics.stats.rtSum,
+        rtCount: metrics.stats.rtCount
+      }
     });
 
     return json(res, 200, {
       user: publicUser(result.user),
-      run: { before: result.before, after: result.after, delta: result.delta }
+      run: {
+        before: result.before,
+        after: result.after,
+        delta: result.delta,
+        bpi: metrics.bpi,
+        title: metrics.title,
+        archetype: metrics.archetype,
+        confidence: metrics.confidence,
+        metrics,
+        rank: result.rank
+      }
     });
   } catch (err) {
     return fail(res, err);

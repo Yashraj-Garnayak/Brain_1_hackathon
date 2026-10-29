@@ -3,6 +3,7 @@
 const { allow, readJson, json, fail, isSecure } = require('../../lib/http');
 const { hashPassword, createSession, sessionCookie } = require('../../lib/auth');
 const { createUser, publicUser } = require('../../lib/users');
+const { geoFromRequest, touchGeo } = require('../../lib/geo');
 
 const USERNAME_RE = /^[A-Za-z0-9_]{3,16}$/;
 
@@ -33,6 +34,15 @@ module.exports = async function handler(req, res) {
 
     const token = await createSession(row.id);
     res.setHeader('Set-Cookie', sessionCookie(token, isSecure(req)));
+
+    const geo = geoFromRequest(req);
+    if (geo.country) {
+      await touchGeo(row.id, geo);
+      row.country = geo.country;
+      row.region = geo.region;
+      row.city = geo.city;
+    }
+
     return json(res, 201, { user: publicUser(row) });
   } catch (err) {
     return fail(res, err);

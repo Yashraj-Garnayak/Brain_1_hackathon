@@ -3,6 +3,7 @@
 const { allow, readJson, json, fail, isSecure } = require('../../lib/http');
 const { verifyPassword, createSession, sessionCookie } = require('../../lib/auth');
 const { findByUsername, publicUser } = require('../../lib/users');
+const { geoFromRequest, touchGeo } = require('../../lib/geo');
 
 module.exports = async function handler(req, res) {
   if (!allow(req, res, ['POST'])) return;
@@ -22,6 +23,15 @@ module.exports = async function handler(req, res) {
 
     const token = await createSession(row.id);
     res.setHeader('Set-Cookie', sessionCookie(token, isSecure(req)));
+
+    const geo = geoFromRequest(req);
+    if (geo.country) {
+      await touchGeo(row.id, geo);
+      row.country = geo.country;
+      row.region = geo.region;
+      row.city = geo.city;
+    }
+
     return json(res, 200, { user: publicUser(row) });
   } catch (err) {
     return fail(res, err);

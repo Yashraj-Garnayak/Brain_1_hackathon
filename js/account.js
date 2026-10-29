@@ -1,4 +1,4 @@
-/* TILE RUSH — account, session and leaderboard client. */
+/* TILE RUSH — account, session, profile and leaderboard client. */
 (function () {
   'use strict';
 
@@ -42,6 +42,15 @@
     state.user = user || null;
     state.ready = true;
     emit();
+  }
+
+  function boardQuery(options) {
+    var opts = options || {};
+    return '/api/leaderboard?by=' + encodeURIComponent(opts.by || 'score') +
+      '&scope=' + encodeURIComponent(opts.scope || 'global') +
+      '&period=' + encodeURIComponent(opts.period || 'all') +
+      '&game=' + encodeURIComponent(opts.game || 'tile-rush') +
+      '&limit=' + (opts.limit || 50);
   }
 
   var Account = {
@@ -92,15 +101,28 @@
           score: run.score,
           tier: run.tier,
           accuracy: run.accuracy,
-          avgRt: run.avgRt
+          avgRt: run.avgRt,
+          misses: run.misses,
+          cycles: run.cycles,
+          rounds: run.rounds,
+          trials: run.trials,
+          gameId: run.gameId || 'tile-rush'
         }
       }).then(function (data) {
         if (data.user) setUser(data.user);
         return data;
       });
     },
-    leaderboard: function (by, limit) {
-      return request('/api/leaderboard?by=' + encodeURIComponent(by || 'score') + '&limit=' + (limit || 50));
+    leaderboard: function (options, legacyLimit) {
+      var opts = typeof options === 'string' ? { by: options, limit: legacyLimit } : (options || {});
+      return request(boardQuery(opts));
+    },
+    profile: function (username, game) {
+      return request('/api/users/' + encodeURIComponent(username) + '?game=' + encodeURIComponent(game || 'tile-rush'));
+    },
+    updateAvatar: function (avatar) {
+      return request('/api/profile', { method: 'PUT', body: { avatar: avatar } })
+        .then(function (data) { if (data.user) setUser(data.user); return data.user; });
     }
   };
 
