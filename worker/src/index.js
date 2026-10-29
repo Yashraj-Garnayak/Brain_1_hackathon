@@ -72,7 +72,7 @@ async function matchmaking(request, env) {
   const res = await stub.fetch('https://queue/join', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(who)
+    body: JSON.stringify({ ...who, leave: !!(body && body.leave) })
   });
   return new Response(res.body, { status: res.status, headers: JSON_HEADERS });
 }

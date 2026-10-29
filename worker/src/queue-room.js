@@ -45,6 +45,13 @@ export class QueueRoom {
     let queue = (await this.state.storage.get('queue')) || [];
     let assigned = (await this.state.storage.get('assigned')) || {};
 
+    if (body.leave) {
+      queue = queue.filter((ticket) => ticket.uid !== uid);
+      delete assigned[uid];
+      await this.state.storage.put({ queue, assigned });
+      return json({ left: true });
+    }
+
     queue = queue.filter((ticket) => now - ticket.at < TICKET_TTL && ticket.uid !== uid);
     for (const key of Object.keys(assigned)) {
       if (now - assigned[key].at >= TICKET_TTL) delete assigned[key];

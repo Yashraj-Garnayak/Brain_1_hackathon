@@ -28,6 +28,7 @@
   var socket = null;
   var pollTimer = null;
   var clockTimer = null;
+  var connectTimer = null;
   var queueStart = 0;
   var matchId = '';
   var me = '';
@@ -155,6 +156,7 @@
   function clearTimers() {
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+    if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
   }
 
   function startQueue() {
@@ -223,6 +225,11 @@
     matchId = id;
     setState('matched');
     setStatus('Connecting to the match…');
+    connectTimer = setTimeout(function () {
+      if (state === 'matched' && !opponent) {
+        setStatus('Opponent did not connect. Leave and try again.');
+      }
+    }, 20000);
     connect();
   }
 
@@ -273,6 +280,7 @@
     if (msg.type === 'peer') {
       if (msg.player && msg.player.name) {
         opponent = msg.player.name;
+        clearTimers();
         if (state === 'matched') setStatus('Opponent connected. Tap READY.');
         render();
       }
@@ -325,7 +333,10 @@
       if (you) me = you.name;
     }
     var other = players.find(function (p) { return p.name !== me; });
-    if (other) opponent = other.name;
+    if (other) {
+      opponent = other.name;
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+    }
     if (match.seed) seed = match.seed;
 
     if (match.status === 'result' && state !== 'result') {
@@ -361,6 +372,7 @@
   function startMatch() {
     if (started) return;
     started = true;
+    clearTimers();
     myScore = 0;
     oppScore = 0;
     updateHud();
@@ -468,7 +480,16 @@
 
   function cancelQueue() {
     clearTimers();
+    /* Tell the queue to drop the ticket so it cannot pair us after we left. */
+    if (ticket && endpoints && endpoints.queue) {
+      fetch(endpoints.queue, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ticket: ticket, leave: true })
+      }).catch(function () { /* best effort */ });
+    }
     setState('lobby');
+    setStatus('Search cancelled. Queue again when you are ready.');
   }
 
   function leave() {
