@@ -2808,3 +2808,14 @@ body.spectating .duel-screen { background: rgba(11, 10, 9, .96); }
 body.spectating .duel-card { background: linear-gradient(170deg, #1d1a17, #0b0a09); }
 /* While a full-screen overlay is open, the page behind it must not scroll. */
 html:has(.screen.show), body:has(.screen.show) { overflow: hidden; }
+
+/* Use the room on large displays instead of a small centred window. */
+@media (min-width: 1000px) {
+  .auth-card { width: min(760px, 94vw); }
+  .board-card { width: min(1400px, 94vw); }
+  .profile-card { width: min(1500px, 96vw); }
+  .insights-card { width: min(1200px, 94vw); }
+  .tutorial-card { max-width: 1100px; }
+  .over-card { width: min(1100px, 94vw); }
+  .duel-card { width: min(760px, 94vw); }
+}
