@@ -1,11 +1,12 @@
 /* Health metrics page. Builds on the tokens in styles.css. */
 
-.health-page { overflow-y: auto; user-select: text; }
+.health-page { overflow-y: auto; user-select: text; background-attachment: fixed; }
 
 .health {
-  max-width: 980px;
+  max-width: none;
+  width: 100%;
   margin: 0 auto;
-  padding: 28px 16px 96px; /* room for the helper button */
+  padding: 28px clamp(18px, 4vw, 64px) 96px; /* room for the helper button */
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -37,7 +38,12 @@
 .health-status { margin: 0; color: var(--muted); font-family: var(--mono); font-size: 13px; min-height: 1em; }
 .health-status.is-error { color: var(--hot); }
 
-.health-days { display: flex; flex-direction: column; gap: 18px; }
+.health-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
 
 .hm-day {
   background: var(--panel);
@@ -102,7 +108,12 @@
 /* Insights: game performance against ring metrics. */
 
 
-.in-days { display: flex; flex-direction: column; gap: 12px; }
+.in-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
 .in-day {
   background: var(--panel);
   border: 1px solid var(--line);
