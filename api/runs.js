@@ -7,6 +7,7 @@ const { geoFromRequest } = require('../lib/geo');
 const { keysFor } = require('../lib/season');
 const { cleanTimeline } = require('../lib/ghost');
 const bpi = require('../shared/bpi');
+const { captureRunDetails } = require('../lib/insights');
 
 function cleanRounds(input) {
   if (!Array.isArray(input)) return [];
@@ -20,6 +21,31 @@ function cleanRounds(input) {
     misses: Math.max(0, Math.round(Number(round && round.misses) || 0)),
     maxTier: Math.max(0, Math.round(Number(round && round.maxTier) || 0))
   }));
+}
+
+function count(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && n >= 0 && n <= 100000 ? n : 0;
+}
+
+// Per-run detail for insights. Reaction times and right/wrong taps come from
+// the same trials BPI reads; anything malformed falls back to an empty value.
+function parseDetails(body, trials) {
+  const taps = trials.filter((t) => t && Number.isFinite(Number(t.rt)));
+  const rts = taps
+    .filter((t) => t.correct)
+    .map((t) => Math.round(Number(t.rt)))
+    .filter((v) => v > 0 && v <= 60000);
+  const tz = Math.round(Number(body.tzOffset));
+  return {
+    correct: rts.length,
+    wrong: taps.filter((t) => !t.correct).length,
+    misses: count(body.misses),
+    bestStreak: count(body.bestStreak),
+    cycles: count(body.cycles),
+    rts,
+    tzOffsetMin: Number.isFinite(tz) && Math.abs(tz) <= 840 ? tz : 0
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -100,9 +126,18 @@ module.exports = async function handler(req, res) {
       }
     });
 
+    // The run is already committed; losing its detail row must not fail the request.
+    let detail = null;
+    try {
+      detail = await captureRunDetails({ user, runId: result.runId, details: parseDetails(body, trials) });
+    } catch (err) {
+      console.error('run detail capture failed', err);
+    }
+
     return json(res, 200, {
       user: publicUser(result.user),
       run: {
+        id: Number(result.runId),
         before: result.before,
         after: result.after,
         delta: result.delta,
@@ -112,7 +147,8 @@ module.exports = async function handler(req, res) {
         confidence: metrics.confidence,
         metrics,
         rank: result.rank
-      }
+      },
+      detail
     });
   } catch (err) {
     return fail(res, err);

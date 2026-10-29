@@ -107,7 +107,9 @@
           rounds: run.rounds,
           trials: run.trials,
           timeline: run.timeline,
-          gameId: run.gameId || 'tile-rush'
+          gameId: run.gameId || 'tile-rush',
+          bestStreak: run.bestStreak,
+          tzOffset: run.tzOffset
         }
       }).then(function (data) {
         if (data.user) setUser(data.user);

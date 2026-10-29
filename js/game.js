@@ -105,7 +105,7 @@
     finalCycles: $('finalCycles'), finalStreak: $('finalStreak'),
     eloBefore: $('eloBefore'), eloAfter: $('eloAfter'), eloDelta: $('eloDelta'), rankPill: $('rankPill'),
     overNote: $('overNote'), newBest: $('newBest'), againBtn: $('againBtn'), homeBtn: $('homeBtn'),
-    overBoardBtn: $('overBoardBtn'),
+    overBoardBtn: $('overBoardBtn'), overInsightsBtn: $('overInsightsBtn'),
     accountBtn: $('accountBtn'), accountAvatar: $('accountAvatar'), accountName: $('accountName'),
     authScreen: $('authScreen'), authClose: $('authClose'), authTitle: $('authTitle'), authLede: $('authLede'),
     authForm: $('authForm'), authUser: $('authUser'), authPass: $('authPass'),
@@ -770,7 +770,9 @@
       rounds: G.roundStats,
       trials: G.trials,
       timeline: G.timeline,
-      gameId: 'tile-rush'
+      gameId: 'tile-rush',
+      bestStreak: G.bestStreak,
+      tzOffset: new Date().getTimezoneOffset()
     }, G.runId);
   }
 
@@ -1854,9 +1856,11 @@
     });
   }
 
+  var pendingSubmit = null;
+
   function submitRun(run, runId) {
     if (!Account || !Account.user()) return;
-    Account.submitRun(run).then(function (data) {
+    var submit = pendingSubmit = Account.submitRun(run).then(function (data) {
       syncSaveFromUser(data.user);
       if (G.runId !== runId || G.state !== 'over') return;
       var r = data.run;
@@ -1884,6 +1888,8 @@
       loadRank();
     }).catch(function (err) {
       if (err && err.status === 401 && Account) Account.refresh();
+    }).then(function () {
+      if (pendingSubmit === submit) pendingSubmit = null;
     });
   }
 
@@ -2114,6 +2120,15 @@
     toMenu();
   });
   el.overBoardBtn.addEventListener('click', function () { openBoard('bpi'); });
+  if (window.location.search) el.overInsightsBtn.href = 'insights.html' + window.location.search;
+  // Leaving mid-submit would cancel the request, so let the run save first.
+  el.overInsightsBtn.addEventListener('click', function (e) {
+    if (!pendingSubmit) return;
+    e.preventDefault();
+    var href = el.overInsightsBtn.href;
+    el.overInsightsBtn.textContent = 'SAVING…';
+    pendingSubmit.then(function () { window.location.href = href; });
+  });
   el.muteBtn.addEventListener('click', toggleMute);
   el.musicToggle.addEventListener('click', toggleMute);
   el.motionToggle.addEventListener('click', toggleMotion);

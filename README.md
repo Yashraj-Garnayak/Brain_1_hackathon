@@ -9,7 +9,9 @@ The client is plain HTML/CSS/JS with no build step. Accounts, runs, profiles and
 ```bash
 npm install
 npm run migrate      # applies db/schema.sql to DATABASE_URL_UNPOOLED
-npx vercel dev       # serves the site and /api on http://localhost:3000
+npm run dev          # vercel dev with .env.local loaded; serves the site and /api on http://localhost:3000
+npm run seed -- <username>          # sync 30 days of Ultrahuman data + seed demo runs from it
+npm run seed -- <username> --clear  # remove the seeded demo runs
 ```
 
 `npm run migrate` reads `DATABASE_URL_UNPOOLED` (falling back to `DATABASE_URL`). Locally those come from `.env.local`, which is created by `vercel env pull` after the Neon integration is connected.
@@ -148,11 +150,13 @@ delta    = clamp(K × (actual − expected), −60, +60)
 | `GET` | `/api/users/:username?game=tile-rush` | Public profile (`self` is `null` for other players); every season carries averaged BPI axes, only the owner also gets run history |
 | `POST` | `/api/profile` | Update your avatar |
 | `GET` | `/api/ghost` | Your best run as a replayable 1 Hz score timeline |
+| `GET` | `/api/insights?from=…&to=…&today=…&last=1` | One week or month of runs with Ultrahuman ring metrics, period summary, what hurt, best hours; `last=1` adds the last played day |
+| `GET` | `/api/ultrahuman?start_epoch=…&end_epoch=…` | Ultrahuman daily metrics proxy (max 7 days) |
 | `POST` | `/api/match/ticket` | Short-lived signed ticket + Worker URLs for 1v1 (body `{spectator:true}` mints a read-only ticket; guests need no account) |
 
 ## Data model
 
-`users` (identity, avatar, rating, bests, region), `sessions` (hashed tokens), `runs` (trial-level run record with season/week keys and BPI), `games` (catalogue), `user_game_stats` (per-game bests), `season_stats` (per-season totals and best rank). All player-owned tables cascade on user delete.
+`users` (identity, avatar, rating, bests, region), `sessions` (hashed tokens), `runs` (trial-level run record with season/week keys and BPI), `games` (catalogue), `user_game_stats` (per-game bests), `season_stats` (per-season totals and best rank), `run_details` (every reaction time, time of play and a ring snapshot per run; `seeded` marks demo runs), `health_days` (daily Ultrahuman summary). All player-owned tables cascade on user delete.
 
 ## Tuning
 
@@ -170,9 +174,15 @@ js/account.js        auth/session + profile + leaderboard client
 js/game.js           state machine, three rounds, scoring, UI
 js/duel.js           1v1 queue, sockets, ghost race, rooms + spectator view
 js/profile.js        profile, BPI radar, expandable season history
+health.html          ring metrics page (js/health.js)
+insights.html        runs vs. ring insights page (js/insights.js)
+js/assistant.js      built-in insights helper (rule-based, no AI or network)
+css/health.css       styles for the ring and insights pages
 api/auth/*.js        register / login / logout / me
 api/runs.js          ranked run submission (authoritative BPI + Elo)
 api/ghost.js         best-run ghost endpoint
+api/insights.js      week/month performance vs. ring metrics
+api/ultrahuman.js    Ultrahuman daily metrics proxy
 api/leaderboard.js   layered weekly/seasonal boards
 api/users/[username].js  public profile
 api/profile.js       avatar update
@@ -185,10 +195,14 @@ lib/db.js            pooled Neon connection
 lib/elo.js           server-side Elo
 lib/geo.js           region/country from request headers
 lib/http.js          JSON/body/error helpers
+lib/insights.js      run detail capture + insight queries
+lib/ultrahuman.js    Ultrahuman fetch and day/moment summaries
 lib/season.js        UTC week + season keys
 lib/users.js         accounts, runs, leaderboards, season breakdown
-db/schema.sql        users / sessions / runs / games / stats
+db/schema.sql        users / sessions / runs / games / stats / run_details / health_days
 scripts/migrate.mjs  migration runner
+scripts/seed-insights.mjs  30-day ring sync + demo runs (npm run seed -- <user>)
+scripts/dev.mjs      vercel dev with .env.local loaded
 worker/              Cloudflare Worker + Durable Objects scaffold
 ```
 
