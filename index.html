@@ -178,6 +178,7 @@
       <div class="intro-actions">
         <button class="btn primary" id="startBtn" type="button">START RUN <span>↵</span></button>
         <button class="btn ghost" id="duelBtn" type="button">PLAY 1V1 <span>⚔</span></button>
+        <button class="btn ghost" id="ghostBtn" type="button">RACE YOUR BEST <span>◎</span></button>
         <div class="intro-meta">
           <div><span class="micro">PERSONAL BEST</span><b id="introBest">0</b></div>
           <div><span class="micro">BPI</span><b id="introBpi">0</b></div>
@@ -422,21 +423,42 @@
 
       <div class="duel-versus" id="duelVersus" hidden>
         <div class="duel-side">
-          <span class="micro">YOU</span>
+          <span class="micro" id="duelYouLabel">YOU</span>
           <b id="duelYou">—</b>
           <span class="duel-score" id="duelYouScore">0</span>
         </div>
         <span class="duel-vs">VS</span>
         <div class="duel-side right">
-          <span class="micro">OPPONENT</span>
+          <span class="micro" id="duelOppLabel">OPPONENT</span>
           <b id="duelOpp">—</b>
           <span class="duel-score" id="duelOppScore">0</span>
+        </div>
+      </div>
+
+      <div class="duel-share" id="duelShare" hidden>
+        <span class="micro">INVITE</span>
+        <code id="duelShareLink">—</code>
+        <button class="linkish" id="duelShareCopy" type="button">copy link</button>
+      </div>
+
+      <div class="duel-room" id="duelRoom" hidden>
+        <div class="duel-room-head">
+          <span class="micro">PRIVATE ROOM</span>
+          <span>First two players race. Everyone else watches.</span>
+        </div>
+        <div class="duel-room-row">
+          <input class="duel-room-input" id="roomCodeInput" maxlength="40" placeholder="ROOM CODE"
+            autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
+          <button class="btn ghost compact" id="roomJoinBtn" type="button">JOIN</button>
+          <button class="btn ghost compact" id="roomWatchBtn" type="button">WATCH</button>
+          <button class="btn ghost compact" id="roomCreateBtn" type="button">CREATE ROOM</button>
         </div>
       </div>
 
       <div class="duel-status" id="duelStatus">Ready when you are.</div>
       <div class="duel-actions">
         <button class="btn primary" id="duelPrimary" type="button">FIND MATCH</button>
+        <button class="btn ghost" id="duelGhostBtn" type="button">RACE YOUR BEST</button>
         <button class="btn ghost" id="duelCancel" type="button">BACK</button>
       </div>
       <p class="duel-note" id="duelNote">3×3 · 25s → 4×4 · 15s → 5×5 · 10s. Breaks are 5s. Both players see the same boards.</p>
@@ -444,7 +466,7 @@
   </div>
 
   <div class="duel-hud" id="duelHud" hidden>
-    <span class="duel-hud-tag">1V1</span>
+    <span class="duel-hud-tag" id="duelHudTag">1V1</span>
     <span class="duel-hud-you"><b id="duelHudYou">0</b><em>YOU</em></span>
     <span class="duel-hud-mid">·</span>
     <span class="duel-hud-opp"><b id="duelHudOpp">0</b><em id="duelHudName">OPP</em></span>

@@ -50,10 +50,12 @@ async function identity(request, env, ticket) {
     const body = request.method === 'POST' ? await request.clone().json() : {};
     name = body && body.name;
   } catch { /* ignore */ }
+  const asked = new URL(request.url).searchParams.get('role') === 'spectator' ? 'spectator' : 'player';
   if (!name) name = new URL(request.url).searchParams.get('name');
   name = String(name || '').trim().slice(0, 32);
+  if (!name && asked === 'spectator') name = 'GUEST';
   if (!name) return null;
-  return { uid: 'dev:' + name.toLowerCase(), name };
+  return { uid: 'dev:' + name.toLowerCase() + (asked === 'spectator' ? ':watch' : ''), name, role: asked };
 }
 
 /** Ask the single global QueueRoom for a match id. */
@@ -66,6 +68,7 @@ async function matchmaking(request, env) {
 
   const who = await identity(request, env, body && body.ticket);
   if (!who) return json({ error: 'ticket_required' }, 401);
+  if (who.role === 'spectator') return json({ error: 'players_only' }, 403);
 
   const id = env.QUEUE.idFromName('global');
   const stub = env.QUEUE.get(id);
@@ -83,14 +86,24 @@ async function matchSocket(request, env, matchId) {
     return json({ error: 'upgrade_required' }, 426);
   }
 
-  const ticket = new URL(request.url).searchParams.get('ticket') || '';
+  const url = new URL(request.url);
+  const ticket = url.searchParams.get('ticket') || '';
   const who = await identity(request, env, ticket);
   if (!who) return json({ error: 'ticket_required' }, 401);
+
+  /* A ticket minted for a spectator can never claim a player slot. A player
+     ticket may still choose to watch. */
+  const asked = url.searchParams.get('role') === 'spectator' ? 'spectator' : 'player';
+  const role = who.role === 'spectator' ? 'spectator' : asked;
+  const roomish = url.searchParams.get('mode') === 'room' || matchId.startsWith('room-');
 
   const id = env.MATCH.idFromName(matchId);
   const headers = new Headers(request.headers);
   headers.set('x-tr-uid', who.uid);
   headers.set('x-tr-name', encodeURIComponent(who.name));
+  headers.set('x-tr-role', role);
+  headers.set('x-tr-kind', roomish ? 'room' : 'duel');
+  headers.set('x-tr-room', matchId.replace(/^room-/, '').toUpperCase().slice(0, 40));
   return env.MATCH.get(id).fetch(new Request(request, { headers }));
 }
 

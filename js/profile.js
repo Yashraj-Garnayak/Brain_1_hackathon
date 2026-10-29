@@ -111,6 +111,7 @@
   }
 
   var seasonMetric = 'bpi';
+  var openSeason = null;
   var lastProfile = null;
   var lastSelf = false;
 
@@ -203,19 +204,74 @@
     var hasDelta = delta != null && !isNaN(delta);
     var deltaCls = !hasDelta || delta === 0 ? 'flat' : delta > 0 ? 'up' : 'down';
     var deltaText = hasDelta ? (delta > 0 ? '+' : '') + delta + metric.unit : '';
+    var open = openSeason === row.key;
 
     var meta = row.games + (row.games === 1 ? ' run' : ' runs') +
       ' \u00b7 ' + row.activeDays + ' active ' + (row.activeDays === 1 ? 'day' : 'days') +
       (row.logins ? ' \u00b7 ' + row.logins + ' sign-in' + (row.logins === 1 ? '' : 's') : '');
 
-    return '<div class="ps-row' + (index === 0 ? ' current' : '') + '">' +
+    return '<button type="button" class="ps-row' + (index === 0 ? ' current' : '') + (open ? ' open' : '') +
+      '" data-season="' + esc(row.key) + '" aria-expanded="' + open + '">' +
       '<div class="ps-row-top">' +
         '<span class="ps-row-key">' + esc(seasonLabel(row.key)) +
           (index === 0 ? '<em>NOW</em>' : '') + '</span>' +
         '<span class="ps-row-val">' + (value == null ? '\u2014' : metric.display(value)) +
-          (hasDelta ? '<b class="' + deltaCls + '">' + deltaText + '</b>' : '') + '</span>' +
+          (hasDelta ? '<b class="' + deltaCls + '">' + deltaText + '</b>' : '') +
+          '<i class="ps-row-chev">' + (open ? '\u2212' : '+') + '</i></span>' +
       '</div>' +
       '<div class="ps-row-meta">' + meta + '</div>' +
+    '</button>';
+  }
+
+  function shortDate(value) {
+    if (!value) return '\u2014';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '\u2014';
+    return MONTHS[d.getMonth()] + ' ' + d.getDate();
+  }
+
+  function seasonDetailHTML(row, isSelf) {
+    var B = window.BPI;
+    var perDay = row.activeDays ? row.games / row.activeDays : 0;
+    var stats =
+      statRow('GAMES', String(row.games || 0)) +
+      statRow('WON', String(row.wins || 0)) +
+      statRow('LOST', String(row.losses || 0)) +
+      statRow('ACCURACY', pct(row.accuracy)) +
+      statRow('BEST BPI', String(row.bestBpi || 0)) +
+      statRow('AVG BPI', String(row.avgBpi || 0)) +
+      statRow('BEST SCORE', fmt(row.bestScore)) +
+      statRow('AVG RT', row.avgRt ? row.avgRt + 'ms' : '\u2014') +
+      statRow('ACTIVE DAYS', String(row.activeDays || 0)) +
+      statRow('SIGN-INS', String(row.logins || 0)) +
+      statRow('BEST RANK', row.bestRank ? '#' + row.bestRank : '\u2014') +
+      statRow('RUNS / DAY', perDay.toFixed(1));
+
+    var archetype = row.archetype || (row.axes && B ? B.archetypeFor(row.axes) : null);
+    var radar = row.axes
+      ? '<div class="ps-detail-radar"><span class="micro">' + esc(archetype || 'FINGERPRINT') + '</span>' +
+        radarSVG(row.axes, 190) +
+        '<p class="ps-detail-note">' + esc(archetype && B && B.ARCHETYPES[archetype] ? B.ARCHETYPES[archetype] : '') + '</p></div>'
+      : '<div class="ps-detail-radar"><p class="ps-empty">No BPI fingerprint recorded for this season.</p></div>';
+
+    var runs = '';
+    if (isSelf && row.runs && row.runs.length) {
+      var rows = row.runs.map(function (run) {
+        return '<li><span>' + esc(shortDate(run.at)) + '</span><b>' + fmt(run.score) + '</b>' +
+          '<em>BPI ' + (run.bpi || 0) + '</em></li>';
+      }).join('');
+      runs = '<div class="ps-detail-runs"><span class="micro">YOUR RUNS IN THIS SEASON <em>only visible to you</em></span>' +
+        '<ul>' + rows + '</ul></div>';
+    }
+
+    return '<div class="ps-detail">' +
+      '<div class="ps-detail-head">' +
+        '<span class="micro">' + esc(seasonLabel(row.key)) + ' SEASON · FULL DETAIL</span>' +
+        '<button class="linkish" type="button" data-season-close="' + esc(row.key) + '">close</button>' +
+      '</div>' +
+      '<div class="ps-detail-body">' +
+        '<div class="ps-detail-stats">' + stats + '</div>' + radar +
+      '</div>' + runs +
     '</div>';
   }
 
@@ -275,8 +331,12 @@
           ? 'No seasons yet. Play a ranked run to start one.'
           : 'No ranked seasons yet.') + '</p>';
       } else {
+        if (openSeason && !rows.some(function (row) { return row.key === openSeason; })) openSeason = null;
         var html = '';
-        for (var i = 0; i < rows.length; i++) html += seasonRowHTML(rows[i], i, metricName, isSelf);
+        for (var i = 0; i < rows.length; i++) {
+          html += seasonRowHTML(rows[i], i, metricName, isSelf);
+          if (rows[i].key === openSeason) html += seasonDetailHTML(rows[i], isSelf);
+        }
         list.innerHTML = html;
       }
     }
@@ -408,6 +468,23 @@
       seasonMetric = metric;
       if (lastProfile) renderSeasons(lastProfile, lastSelf);
       else syncSeasonSeg();
+    });
+  }
+
+  var seasonList = $('profileSeasons');
+  if (seasonList) {
+    seasonList.addEventListener('click', function (e) {
+      var close = e.target.closest ? e.target.closest('[data-season-close]') : null;
+      if (close) {
+        openSeason = null;
+        if (lastProfile) renderSeasons(lastProfile, lastSelf);
+        return;
+      }
+      var row = e.target.closest ? e.target.closest('[data-season]') : null;
+      if (!row) return;
+      var key = row.getAttribute('data-season');
+      openSeason = openSeason === key ? null : key;
+      if (lastProfile) renderSeasons(lastProfile, lastSelf);
     });
   }
 

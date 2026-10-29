@@ -106,6 +106,7 @@
           cycles: run.cycles,
           rounds: run.rounds,
           trials: run.trials,
+          timeline: run.timeline,
           gameId: run.gameId || 'tile-rush'
         }
       }).then(function (data) {
@@ -124,8 +125,11 @@
       return request('/api/profile', { method: 'PUT', body: { avatar: avatar } })
         .then(function (data) { if (data.user) setUser(data.user); return data.user; });
     },
-    duelTicket: function () {
-      return request('/api/match/ticket', { method: 'POST', body: {} });
+    duelTicket: function (options) {
+      return request('/api/match/ticket', { method: 'POST', body: options || {} });
+    },
+    ghost: function () {
+      return request('/api/ghost');
     }
   };
 

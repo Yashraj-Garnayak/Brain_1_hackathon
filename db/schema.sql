@@ -55,6 +55,9 @@ alter table runs add column if not exists country text;
 alter table runs add column if not exists region text;
 alter table runs add column if not exists result text;
 
+-- Cumulative score sampled once per second, used to replay a run as a ghost.
+alter table runs add column if not exists timeline jsonb;
+
 create index if not exists runs_user_idx on runs (user_id, created_at desc);
 create index if not exists runs_user_game_idx on runs (user_id, game_id, created_at desc);
 create index if not exists runs_game_season_bpi_idx on runs (game_id, season_key, bpi desc);

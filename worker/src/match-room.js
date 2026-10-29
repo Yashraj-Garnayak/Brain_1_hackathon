@@ -1,12 +1,14 @@
-/* TILE RUSH — 1v1 match Durable Object.
+/* TILE RUSH — 1v1 / room Durable Object.
  *
- * One DO instance per match id. Holds up to two WebSocket players, keeps the
- * shared round state, relays emotes and decides the result. Sockets use the
- * hibernation API, so an idle match costs nothing while both players sit in a
- * break.
+ * One DO instance per match id. A queue match holds up to two players. A room
+ * (`room-CODE`) holds two players plus up to 20 read-only spectators; the first
+ * two players to connect take the slots, everyone after that watches. Sockets
+ * use the hibernation API, so an idle room costs nothing.
  *
  * Identity is never trusted from the socket payload: the Worker verifies the
- * Vercel-signed match ticket and passes `x-tr-uid` / `x-tr-name` headers.
+ * Vercel-signed match ticket and passes `x-tr-uid` / `x-tr-name` / `x-tr-role`
+ * headers. Spectator tickets cannot claim a player slot, and spectators cannot
+ * send ready/progress/finish/emote/rematch messages.
  *
  * Protocol (client -> server):
  *   ready    { ready: true }
@@ -18,18 +20,20 @@
  *   join     {}                                // legacy no-op, identity is fixed
  *
  * Server -> client:
- *   state    { match, you }
- *   peer     { player }
- *   countdown{ startsAt, round, seed }
- *   progress { from, round, correct, score }
- *   emote    { from, id }
- *   result   { winner, players }
- *   peer_left{ player }
- *   pong     { now }
- *   error    { code }
+ *   state      { match, you, spectator? }
+ *   peer       { player }
+ *   countdown  { startsAt, round, seed, players }
+ *   progress   { from, round, correct, score }
+ *   emote      { from, id }
+ *   result     { winner, players }
+ *   peer_left  { player }
+ *   spectators { count }
+ *   pong       { now }
+ *   error      { code }
  */
 
 const MAX_PLAYERS = 2;
+const MAX_SPECTATORS = 20;
 const MAX_MESSAGE = 4096;
 const MAX_SCORE = 10_000_000;
 const EMOTES = new Set(['gg', 'wave', 'nice', 'oops', 'focus', 'rematch']);
@@ -52,6 +56,10 @@ function newSeed() {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
+function cleanCode(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
+}
+
 export class MatchRoom {
   constructor(state, env) {
     this.state = state;
@@ -59,27 +67,50 @@ export class MatchRoom {
     this.match = null;
   }
 
-  async load() {
+  async load(init) {
     if (this.match) return this.match;
-    this.match = (await this.state.storage.get('match')) || {
+    const stored = await this.state.storage.get('match');
+    this.match = stored || {
       status: 'open',
       round: 0,
       startsAt: 0,
       seed: newSeed(),
       winner: null,
       players: [],
+      spectators: [],
+      kind: 'duel',
+      code: null,
       updatedAt: Date.now()
     };
     if (!this.match.seed) this.match.seed = newSeed();
+    if (!Array.isArray(this.match.players)) this.match.players = [];
+    if (!Array.isArray(this.match.spectators)) this.match.spectators = [];
+    if (!this.match.kind) this.match.kind = 'duel';
+
+    /* Kind is fixed when the object is first created. Watching a queue match
+       by id must not relabel it as a room. */
+    if (init) {
+      if (!stored) {
+        this.match.kind = init.kind;
+        this.match.code = init.code || null;
+      } else if (this.match.kind === 'room' && !this.match.code) {
+        this.match.code = init.code;
+      }
+    }
 
     /* Hibernation drops no sockets, but it does drop in-memory flags. Derive
-       connectivity from the live sockets instead of resetting everyone. */
-    const live = new Set();
+       connectivity from the live sockets instead of resetting everyone, and
+       forget spectators whose socket is gone. */
+    const players = new Set();
+    const watchers = new Set();
     for (const ws of this.sockets()) {
       const attachment = ws.deserializeAttachment();
-      if (attachment && attachment.uid) live.add(attachment.uid);
+      if (!attachment || !attachment.uid) continue;
+      if (attachment.role === 'spectator') watchers.add(attachment.uid);
+      else players.add(attachment.uid);
     }
-    for (const player of this.match.players) player.connected = live.has(player.uid);
+    for (const player of this.match.players) player.connected = players.has(player.uid);
+    this.match.spectators = this.match.spectators.filter((s) => watchers.has(s.uid));
     return this.match;
   }
 
@@ -99,55 +130,86 @@ export class MatchRoom {
     name = String(name).trim().slice(0, 32);
     if (!uid || !name) return json({ error: 'ticket_required' }, 401);
 
-    const match = await this.load();
+    const kind = request.headers.get('x-tr-kind') === 'room' ? 'room' : 'duel';
+    const code = cleanCode(request.headers.get('x-tr-room'));
+    const wantsPlayer = request.headers.get('x-tr-role') !== 'spectator';
 
-    const existing = match.players.find((p) => p.uid === uid);
-    if (existing) {
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair);
-      this.state.acceptWebSocket(server);
-      server.serializeAttachment({ uid });
-      existing.connected = true;
-      existing.name = name;
-      await this.save();
-      this.send(server, { type: 'state', you: this.publicPlayer(existing), match: this.snapshot() });
-      this.broadcast({ type: 'state', match: this.snapshot() }, server);
-      return new Response(null, { status: 101, webSocket: client });
+    const match = await this.load({ kind, code });
+
+    if (wantsPlayer) {
+      const existing = match.players.find((p) => p.uid === uid);
+      if (existing) return this.acceptPlayer(match, existing, name);
+
+      if (match.players.length >= MAX_PLAYERS && match.status === 'open') {
+        match.players = match.players.filter((p) => p.connected);
+      }
+      if (match.players.length >= MAX_PLAYERS) {
+        /* In a room the next arrival simply becomes a spectator; in a queue
+           match the second player was already decided, so refuse. */
+        if (match.kind !== 'room') return json({ error: 'match_full' }, 409);
+        return this.acceptSpectator(match, uid, name, true);
+      }
+
+      const player = {
+        uid,
+        name,
+        ready: false,
+        score: 0,
+        bpi: 0,
+        done: false,
+        connected: true
+      };
+      match.players.push(player);
+      return this.acceptPlayer(match, player, name, true);
     }
 
-    if (this.sockets().length >= MAX_PLAYERS) return json({ error: 'match_full' }, 409);
+    return this.acceptSpectator(match, uid, name, false);
+  }
 
-    const open = match.status === 'open' || match.status === 'countdown';
-    if (match.players.length >= MAX_PLAYERS && !open) {
-      return json({ error: 'match_full' }, 409);
-    }
-    if (match.players.length >= MAX_PLAYERS) {
-      match.players = match.players.filter((p) => p.connected);
-    }
-    if (match.players.length >= MAX_PLAYERS) {
-      return json({ error: 'match_full' }, 409);
-    }
+  async acceptPlayer(match, player, name, fresh = false) {
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    this.state.acceptWebSocket(server);
+    server.serializeAttachment({ uid: player.uid, role: 'player' });
 
-    const player = {
-      uid,
-      name,
-      ready: false,
-      score: 0,
-      bpi: 0,
-      done: false,
-      connected: true
-    };
-    match.players.push(player);
+    player.connected = true;
+    player.name = name;
+    await this.save();
+
+    this.send(server, { type: 'state', you: this.publicPlayer(player), match: this.snapshot() });
+    this.broadcastTo('player', { type: 'peer', player: this.publicPlayer(player) }, server);
+    this.broadcastTo('spectator', { type: 'state', match: this.snapshot() });
+    if (fresh) await this.maybeStart();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async acceptSpectator(match, uid, name, auto) {
+    let watcher = match.spectators.find((s) => s.uid === uid);
+    if (!watcher) {
+      if (match.spectators.length >= MAX_SPECTATORS) {
+        return json({ error: 'spectator_full' }, 409);
+      }
+      watcher = { uid, name, connected: true };
+      match.spectators.push(watcher);
+    }
+    watcher.name = name;
+    watcher.connected = true;
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
-    server.serializeAttachment({ uid });
+    server.serializeAttachment({ uid, role: 'spectator' });
 
     await this.save();
-    this.send(server, { type: 'state', you: this.publicPlayer(player), match: this.snapshot() });
-    this.broadcast({ type: 'peer', player: this.publicPlayer(player) }, server);
-    await this.maybeStart();
+
+    this.send(server, {
+      type: 'state',
+      spectator: true,
+      auto: !!auto,
+      you: null,
+      match: this.snapshot()
+    });
+    this.broadcast({ type: 'spectators', count: this.spectatorCount() });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -166,6 +228,11 @@ export class MatchRoom {
     return this.state.getWebSockets();
   }
 
+  roleOf(ws) {
+    const attachment = ws.deserializeAttachment();
+    return attachment && attachment.role === 'spectator' ? 'spectator' : 'player';
+  }
+
   send(ws, payload) {
     try { ws.send(JSON.stringify(payload)); } catch { /* socket is closing */ }
   }
@@ -176,10 +243,27 @@ export class MatchRoom {
     }
   }
 
+  broadcastTo(role, payload, except) {
+    for (const ws of this.sockets()) {
+      if (ws !== except && this.roleOf(ws) === role) this.send(ws, payload);
+    }
+  }
+
+  spectatorCount() {
+    return this.match.spectators.filter((s) => s.connected).length;
+  }
+
   playerFor(ws) {
     const attachment = ws.deserializeAttachment();
     if (!attachment) return null;
     return this.match.players.find((p) => p.uid === attachment.uid) || null;
+  }
+
+  stateFor(ws, me) {
+    if (this.roleOf(ws) === 'spectator') {
+      return { type: 'state', spectator: true, you: null, match: this.snapshot() };
+    }
+    return { type: 'state', you: me ? this.publicPlayer(me) : null, match: this.snapshot() };
   }
 
   async webSocketMessage(ws, message) {
@@ -190,11 +274,19 @@ export class MatchRoom {
 
     await this.load();
 
+    /* Spectators are read-only: they may ping or ask for a refresh, nothing
+       else can touch match state. */
+    if (this.roleOf(ws) === 'spectator') {
+      if (msg.type === 'ping') return this.send(ws, { type: 'pong', now: Date.now() });
+      if (msg.type === 'join' || msg.type === 'hello') return this.send(ws, this.stateFor(ws, null));
+      return this.send(ws, { type: 'error', code: 'read_only' });
+    }
+
     const me = this.playerFor(ws);
     if (!me) return this.send(ws, { type: 'error', code: 'ticket_required' });
 
     if (msg.type === 'join' || msg.type === 'hello') {
-      return this.send(ws, { type: 'state', you: this.publicPlayer(me), match: this.snapshot() });
+      return this.send(ws, this.stateFor(ws, me));
     }
 
     if (msg.type === 'ready') {
@@ -292,11 +384,14 @@ export class MatchRoom {
 
   snapshot() {
     return {
+      kind: this.match.kind,
+      code: this.match.code,
       status: this.match.status,
       round: this.match.round,
       startsAt: this.match.startsAt,
       seed: this.match.seed,
       winner: this.match.winner,
+      spectators: this.spectatorCount(),
       players: this.match.players.map((p) => this.publicPlayer(p))
     };
   }
@@ -305,8 +400,30 @@ export class MatchRoom {
     const attachment = ws.deserializeAttachment();
     if (!attachment) return;
     await this.load();
+
+    const others = this.sockets().filter((other) => other !== ws);
+
+    if (attachment.role === 'spectator') {
+      const stillLive = others.some((other) => {
+        const att = other.deserializeAttachment();
+        return att && att.role === 'spectator' && att.uid === attachment.uid;
+      });
+      if (!stillLive) {
+        this.match.spectators = this.match.spectators.filter((s) => s.uid !== attachment.uid);
+        await this.save();
+      }
+      this.broadcast({ type: 'spectators', count: this.spectatorCount() });
+      return;
+    }
+
     const player = this.match.players.find((p) => p.uid === attachment.uid);
     if (!player) return;
+
+    const stillLive = others.some((other) => {
+      const att = other.deserializeAttachment();
+      return att && att.role !== 'spectator' && att.uid === attachment.uid;
+    });
+    if (stillLive) return;
 
     player.connected = false;
 
@@ -321,6 +438,7 @@ export class MatchRoom {
 
     await this.save();
     this.broadcast({ type: 'peer_left', player: player.name });
+    this.broadcast({ type: 'state', match: this.snapshot() });
   }
 
   async webSocketError(ws) {

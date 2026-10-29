@@ -55,6 +55,7 @@ export async function verifyTicket(ticket, env) {
   return {
     uid: String(payload.uid).slice(0, 64),
     name: String(payload.name).trim().slice(0, 32),
+    role: payload.role === 'spectator' ? 'spectator' : 'player',
     exp: payload.exp
   };
 }

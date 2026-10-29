@@ -1,11 +1,14 @@
-/* TILE RUSH — 1v1 client.
+/* TILE RUSH — 1v1 + ghost client.
  *
- * Flow: signed-in player asks the Vercel API for a short-lived ticket, polls
+ * 1v1: a signed-in player asks the Vercel API for a short-lived ticket, polls
  * the Cloudflare queue with it, then opens the match socket. Both players ready
  * up, the server starts a shared 3-second countdown, and each client runs the
  * normal three-round game on the same seeded boards. Scores stream to the
  * opponent, emotes are available during the 5-second breaks, and the server
  * decides the winner.
+ *
+ * Ghost: the same flow without a socket. The player races a replay of their own
+ * best run, sampled once per second on the server and driven locally.
  */
 (function () {
   'use strict';
@@ -17,20 +20,35 @@
     title: $('duelTitle'), lede: $('duelLede'), status: $('duelStatus'), note: $('duelNote'),
     versus: $('duelVersus'), you: $('duelYou'), opp: $('duelOpp'),
     youScore: $('duelYouScore'), oppScore: $('duelOppScore'),
-    primary: $('duelPrimary'), cancel: $('duelCancel'),
+    youLabel: $('duelYouLabel'), oppLabel: $('duelOppLabel'),
+    primary: $('duelPrimary'), cancel: $('duelCancel'), ghostBtn: $('duelGhostBtn'),
     hud: $('duelHud'), hudYou: $('duelHudYou'), hudOpp: $('duelHudOpp'), hudName: $('duelHudName'),
-    feed: $('duelFeed'), emotes: $('duelEmotes'), enter: $('duelBtn')
+    hudTag: $('duelHudTag'),
+    feed: $('duelFeed'), emotes: $('duelEmotes'), enter: $('duelBtn'), ghostEntry: $('ghostBtn'),
+    share: $('duelShare'), shareLink: $('duelShareLink'), shareCopy: $('duelShareCopy'),
+    room: $('duelRoom'), roomInput: $('roomCodeInput'),
+    roomJoin: $('roomJoinBtn'), roomWatch: $('roomWatchBtn'), roomCreate: $('roomCreateBtn')
   };
 
-  var state = 'idle';            // idle | lobby | queue | matched | playing | result
+  var state = 'idle';            // idle | lobby | queue | matched | playing | watching | result
+  var mode = 'duel';             // duel | ghost | room
   var ticket = null;
   var endpoints = null;
   var socket = null;
   var pollTimer = null;
   var clockTimer = null;
   var connectTimer = null;
+  var ghostTimer = null;
+  var ghost = null;
+  var ghostTrack = null;
+  var ghostAt = 0;
   var queueStart = 0;
   var matchId = '';
+  var roomCode = '';
+  var watching = false;
+  var autoWatched = false;
+  var spectatorCount = 0;
+  var watchPlayers = [];
   var me = '';
   var opponent = '';
   var myScore = 0;
@@ -68,13 +86,18 @@
   }
 
   function syncEmotes() {
-    els.emotes.hidden = !(state === 'playing');
+    els.emotes.hidden = !(state === 'playing' && mode === 'duel');
   }
 
   function setState(next) {
     state = next;
     render();
     syncEmotes();
+  }
+
+  function inviteLink() {
+    if (!/^[A-Z0-9]{6}$/.test(roomCode)) return '';
+    return location.origin + '/?room=' + roomCode;
   }
 
   function render() {
@@ -85,18 +108,48 @@
       return;
     }
 
-    els.badge.textContent = state === 'result' ? 'MATCH COMPLETE' : 'RATED RUN';
+    els.room.hidden = state !== 'lobby';
+    var link = inviteLink();
+    els.share.hidden = !link || state === 'lobby';
+    if (link) els.shareLink.textContent = link.replace(/^https?:\/\//, '');
+
+    els.badge.textContent = state === 'result'
+      ? (mode === 'ghost' ? 'GHOST RUN' : watching ? 'FINISHED' : 'MATCH COMPLETE')
+      : watching
+        ? 'LIVE'
+        : mode === 'ghost'
+          ? 'BEST SELF'
+          : mode === 'room'
+            ? 'PRIVATE ROOM'
+            : 'RATED RUN';
     els.cancel.hidden = state === 'queue';
+    els.primary.hidden = false;
     els.primary.disabled = false;
+    els.ghostBtn.hidden = !((state === 'lobby' || state === 'queue') && mode !== 'room');
 
     if (state === 'lobby') {
-      els.kicker.textContent = '1V1 · LIVE DUEL';
-      els.title.textContent = 'DUEL';
-      els.lede.textContent = 'Same three rounds. Same boards. Two players, one clock.';
+      if (mode === 'room') {
+        els.kicker.textContent = 'PRIVATE ROOM';
+        els.title.textContent = roomCode ? 'ROOM ' + roomCode : 'DUEL';
+        els.lede.textContent = 'Two players race. Everyone else watches live, read-only.';
+        els.versus.hidden = true;
+        els.primary.textContent = signedIn() ? 'JOIN AS PLAYER' : 'SIGN IN TO PLAY';
+        els.cancel.textContent = 'BACK';
+        setStatus(roomCode
+          ? 'Room ' + roomCode + ' · JOIN takes the next player slot. WATCH is read-only.'
+          : 'Create a room or type a code to join or watch.');
+        els.note.textContent = 'Room links open this lobby. First two players race; the next 20 can watch.';
+        return;
+      }
+      els.kicker.textContent = mode === 'ghost' ? 'SOLO · BEST SELF' : '1V1 · LIVE DUEL';
+      els.title.textContent = mode === 'ghost' ? 'YOUR BEST' : 'DUEL';
+      els.lede.textContent = mode === 'ghost'
+        ? 'Race a replay of your highest-scoring run. Same three rounds, one ghost.'
+        : 'Same three rounds. Same boards. Two players, one clock.';
       els.versus.hidden = true;
       els.primary.textContent = 'FIND MATCH';
       els.cancel.textContent = 'BACK';
-      setStatus(signedIn() ? 'You are signed in. Queue up against a player near your rating.'
+      setStatus(signedIn() ? (mode === 'ghost' ? 'Loading your ghost…' : 'You are signed in. Queue up against a player near your rating.')
         : 'Sign in to queue. Accounts keep matches fair and rated.');
       els.note.textContent = '3×3 · 25s → 4×4 · 15s → 5×5 · 10s. Breaks are 5s. Both players see the same boards.';
       return;
@@ -109,37 +162,90 @@
       els.versus.hidden = true;
       els.primary.textContent = 'CANCEL SEARCH';
       els.cancel.textContent = 'BACK';
-      els.note.textContent = 'The queue waits two minutes for an opponent. If nobody arrives, try again later.';
+      els.note.textContent = 'Nobody yet? Keep waiting, or race your best while the queue runs.';
       return;
     }
 
     if (state === 'matched') {
-      els.kicker.textContent = 'MATCH FOUND';
+      els.kicker.textContent = mode === 'room' ? 'PRIVATE ROOM · ' + (roomCode || '') : 'MATCH FOUND';
       els.title.textContent = 'READY UP';
-      els.lede.textContent = 'Both players ready and the clock starts together.';
+      els.lede.textContent = mode === 'room'
+        ? 'The first two players race. Everyone else can watch live.'
+        : 'Both players ready and the clock starts together.';
       els.versus.hidden = false;
+      els.youLabel.textContent = 'YOU';
+      els.oppLabel.textContent = 'OPPONENT';
       els.you.textContent = me || 'YOU';
       els.opp.textContent = opponent || 'WAITING';
       els.youScore.textContent = fmt(myScore);
       els.oppScore.textContent = fmt(oppScore);
       els.primary.textContent = rematchSent ? 'REMATCH REQUESTED' : 'READY';
       els.primary.disabled = rematchSent;
+      els.cancel.textContent = mode === 'room' ? 'LEAVE ROOM' : 'LEAVE';
+      if (!rematchSent) setStatus(mode === 'room' && !opponent
+        ? 'Waiting for a second player. Share the invite link.'
+        : 'Tap READY when you want the countdown to start.');
+      els.note.textContent = mode === 'room'
+        ? (spectatorCount ? spectatorCount + ' watching · ' : '') +
+          'Share the link to fill the room or invite spectators.'
+        : 'Rounds start after both players are ready. Emotes unlock in the breaks.';
+      return;
+    }
+
+    if (state === 'watching') {
+      var a = watchPlayers[0] || null;
+      var b = watchPlayers[1] || null;
+      els.kicker.textContent = 'SPECTATING · ' + (roomCode ? 'ROOM ' + roomCode : String(matchId).slice(0, 8).toUpperCase());
+      els.title.textContent = 'LIVE';
+      els.lede.textContent = 'You are watching read-only. Emotes and runs stay with the players.';
+      els.versus.hidden = false;
+      els.youLabel.textContent = 'PLAYER 1';
+      els.oppLabel.textContent = 'PLAYER 2';
+      els.you.textContent = a ? a.name : 'WAITING';
+      els.opp.textContent = b ? b.name : 'WAITING';
+      els.youScore.textContent = fmt(a ? a.score : 0);
+      els.oppScore.textContent = fmt(b ? b.score : 0);
+      els.primary.hidden = true;
       els.cancel.textContent = 'LEAVE';
-      if (!rematchSent) setStatus('Tap READY when you want the countdown to start.');
-      els.note.textContent = 'Rounds start after both players are ready. Emotes unlock in the breaks.';
+      els.note.textContent = (spectatorCount ? spectatorCount + ' watching · ' : '') +
+        'Live scores update during the run.';
       return;
     }
 
     if (state === 'result') {
       els.versus.hidden = false;
+      if (watching) {
+        var first = watchPlayers[0] || { name: 'PLAYER 1', score: 0 };
+        var second = watchPlayers[1] || { name: 'PLAYER 2', score: 0 };
+        els.youLabel.textContent = 'PLAYER 1';
+        els.oppLabel.textContent = 'PLAYER 2';
+        els.you.textContent = first.name;
+        els.opp.textContent = second.name;
+        els.youScore.textContent = fmt(first.score);
+        els.oppScore.textContent = fmt(second.score);
+        els.primary.hidden = true;
+        els.cancel.textContent = 'LEAVE';
+        els.note.textContent = 'Read-only room replay. The players can run it back with a rematch.';
+        return;
+      }
+      els.youLabel.textContent = 'YOU';
+      els.oppLabel.textContent = 'OPPONENT';
       els.you.textContent = me || 'YOU';
-      els.opp.textContent = opponent || 'OPPONENT';
+      els.opp.textContent = opponent || (mode === 'ghost' ? 'YOUR BEST' : 'OPPONENT');
       els.youScore.textContent = fmt(myScore);
       els.oppScore.textContent = fmt(oppScore);
-      els.primary.textContent = rematchSent ? 'REMATCH REQUESTED' : 'REMATCH';
+      if (mode === 'ghost') {
+        els.primary.textContent = 'RACE AGAIN';
+        els.note.textContent = 'Your ghost replays your best run second by second. Beat it for a new personal best.';
+      } else if (mode === 'room') {
+        els.primary.textContent = rematchSent ? 'REMATCH REQUESTED' : 'REMATCH';
+        els.note.textContent = 'Both runs are rated and saved. The room stays open for a rematch.';
+      } else {
+        els.primary.textContent = rematchSent ? 'REMATCH REQUESTED' : 'REMATCH';
+        els.note.textContent = 'Both runs are rated and saved to your season stats.';
+      }
       els.primary.disabled = rematchSent;
-      els.cancel.textContent = 'LEAVE';
-      els.note.textContent = 'Both runs are rated and saved to your season stats.';
+      els.cancel.textContent = mode === 'room' ? 'LEAVE ROOM' : 'LEAVE';
       return;
     }
   }
@@ -157,6 +263,7 @@
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
     if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+    if (ghostTimer) { clearInterval(ghostTimer); ghostTimer = null; }
   }
 
   function startQueue() {
@@ -167,13 +274,18 @@
       return;
     }
     clearTimers();
+    mode = 'duel';
+    watching = false;
+    roomCode = '';
+    spectatorCount = 0;
+    watchPlayers = [];
+    els.hudTag.textContent = '1V1';
     rematchSent = false;
     closedByUs = false;
     reconnects = 0;
     setState('queue');
-    if (!ticket || !endpoints) {
-      setStatus('Issuing match ticket…');
-    }
+    setStatus('Issuing match ticket…');
+    ticket = null;
     fetchTicket().then(function () {
       queueStart = Date.now();
       setStatus('In queue · ' + elapsed());
@@ -186,8 +298,8 @@
     });
   }
 
-  function fetchTicket() {
-    return Account.duelTicket().then(function (data) {
+  function fetchTicket(spectator) {
+    return Account.duelTicket({ spectator: !!spectator }).then(function (data) {
       ticket = data.ticket;
       endpoints = { queue: data.queueUrl, socket: data.socketBase };
       return data;
@@ -233,11 +345,254 @@
     connect();
   }
 
+  /* ---------- ghost: race your own best run ---------- */
+
+  function goGhost() {
+    if (!signedIn()) {
+      if (window.TileRush && TileRush.openAuth) TileRush.openAuth(false);
+      return;
+    }
+    clearTimers();
+    if (state === 'queue') cancelQueue();
+    if (socket) {
+      closedByUs = true;
+      try { socket.close(); } catch (e) { /* ignore */ }
+      socket = null;
+    }
+    mode = 'ghost';
+    started = false;
+    rematchSent = false;
+    myScore = 0;
+    oppScore = 0;
+    setState('lobby');
+    els.primary.textContent = 'LOADING';
+    els.primary.disabled = true;
+    setStatus('Loading your best run…');
+
+    Account.ghost().then(function (data) {
+      if (mode !== 'ghost') return;
+      if (!data || !data.ghost) {
+        els.primary.disabled = false;
+        els.primary.textContent = 'FIND MATCH';
+        setStatus('No best run yet. Finish a ranked run and it becomes your ghost.');
+        return;
+      }
+      ghost = data.ghost;
+      ghostTrack = Array.isArray(ghost.timeline) ? ghost.timeline : [0, ghost.score];
+      opponent = 'YOUR BEST';
+      me = (Account.user() && Account.user().username) || 'YOU';
+      seed = 'ghost-' + Math.random().toString(36).slice(2, 10);
+      oppScore = 0;
+      startMatch();
+      ghostAt = Date.now();
+      ghostTimer = setInterval(ghostTick, 200);
+    }).catch(function (err) {
+      if (mode !== 'ghost') return;
+      els.primary.disabled = false;
+      els.primary.textContent = 'FIND MATCH';
+      setStatus((err && err.message) || 'Could not load your ghost.');
+    });
+  }
+
+  function ghostTick() {
+    if (mode !== 'ghost' || state !== 'playing') return;
+    var t = Math.floor((Date.now() - ghostAt) / 1000);
+    var i = Math.max(0, Math.min(ghostTrack.length - 1, t));
+    oppScore = Number(ghostTrack[i]) || 0;
+    updateHud();
+  }
+
+  function ghostResult() {
+    clearTimers();
+    var best = ghost ? Number(ghost.score) || 0 : 0;
+    oppScore = best;
+    var diff = myScore - best;
+    els.kicker.textContent = 'SOLO · BEST SELF';
+    els.title.textContent = diff > 0 ? 'NEW BEST' : diff === 0 ? 'TIED YOUR BEST' : 'DEFEAT';
+    els.lede.textContent = diff > 0
+      ? 'You beat your ghost by ' + fmt(diff) + '. That run is your new best.'
+      : diff === 0
+        ? 'A dead heat with your best run.'
+        : 'Your best stayed ' + fmt(-diff) + ' ahead this time.';
+    setStatus('You ' + fmt(myScore) + ' · best ' + fmt(best));
+    rematchSent = false;
+    setState('result');
+    showHud(false);
+    syncEmotes();
+  }
+
+  /* ---------- rooms + read-only spectators ---------- */
+
+  var ROOM_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+  function makeRoomCode() {
+    var bytes = new Uint8Array(6);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+    else for (var b = 0; b < bytes.length; b++) bytes[b] = Math.floor(Math.random() * 256);
+    var out = '';
+    for (var i = 0; i < bytes.length; i++) out += ROOM_ALPHABET[bytes[i] % ROOM_ALPHABET.length];
+    return out;
+  }
+
+  /* A six-character code is always a room. Anything else that looks like a
+     match id can still be watched, which covers "type the game id". */
+  function normalizeEntry(raw) {
+    var value = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    var room = /^(?:ROOM-)?([A-Z0-9]{6})$/.exec(value);
+    if (room) return { id: 'room-' + room[1], code: room[1] };
+    var loose = String(raw || '').trim();
+    if (/^[A-Za-z0-9_-]{4,40}$/.test(loose)) return { id: loose, code: '' };
+    return null;
+  }
+
+  function roomEntry() {
+    return normalizeEntry(els.roomInput.value || roomCode || matchId);
+  }
+
+  function openRoom(code) {
+    var entry = normalizeEntry(code);
+    if (!entry) return;
+    mode = 'room';
+    watching = false;
+    roomCode = entry.code;
+    matchId = entry.id;
+    watchPlayers = [];
+    spectatorCount = 0;
+    els.roomInput.value = entry.code || entry.id;
+    if (state === 'idle') setState('lobby');
+    else render();
+    if (entry.code) {
+      setStatus('Room ' + entry.code + ' · JOIN takes the next player slot, WATCH is read-only.');
+    }
+  }
+
+  function createRoom() {
+    if (!signedIn()) {
+      setStatus('Sign in to open a room. Watching needs no account.');
+      if (window.TileRush && TileRush.openAuth) TileRush.openAuth(false);
+      return;
+    }
+    var code = makeRoomCode();
+    els.roomInput.value = code;
+    enterRoom('room-' + code, 'player');
+  }
+
+  function joinRoom() {
+    var entry = roomEntry();
+    if (!entry) {
+      setStatus('Type a 6-character room code first.');
+      return;
+    }
+    if (!signedIn()) {
+      setStatus('Sign in to take a player slot. You can WATCH without an account.');
+      if (window.TileRush && TileRush.openAuth) TileRush.openAuth(false);
+      return;
+    }
+    enterRoom(entry.id, 'player');
+  }
+
+  function watchRoom() {
+    var entry = roomEntry();
+    if (!entry) {
+      setStatus('Type a 6-character room code first.');
+      return;
+    }
+    enterRoom(entry.id, 'spectator');
+  }
+
+  function enterRoom(id, role) {
+    var entry = normalizeEntry(id);
+    if (!entry) {
+      setStatus('That room code is not valid.');
+      return;
+    }
+
+    var asWatcher = role === 'spectator';
+    clearTimers();
+    if (state === 'queue') cancelQueue();
+    if (socket) {
+      closedByUs = true;
+      try { socket.close(); } catch (e) { /* ignore */ }
+      socket = null;
+    }
+
+    mode = 'room';
+    watching = asWatcher;
+    autoWatched = false;
+    matchId = entry.id;
+    roomCode = entry.code;
+    me = asWatcher ? '' : ((Account.user() && Account.user().username) || '');
+    opponent = '';
+    myScore = oppScore = 0;
+    watchPlayers = [];
+    spectatorCount = 0;
+    seed = '';
+    started = false;
+    rematchSent = false;
+    closedByUs = false;
+    reconnects = 0;
+    pendingFinish = null;
+    els.roomInput.value = entry.code || entry.id;
+    els.hudTag.textContent = asWatcher ? 'WATCH' : 'ROOM';
+    setState(asWatcher ? 'watching' : 'matched');
+    setStatus(asWatcher ? 'Connecting to watch…' : 'Joining the room…');
+    ticket = null;
+
+    connectTimer = setTimeout(function () {
+      if ((state === 'matched' || state === 'watching') && !opponent) {
+        setStatus(asWatcher ? 'Room not answering yet. The link may be new or wrong.' : 'Room is not answering. Leave and try again.');
+      }
+    }, 20000);
+
+    fetchTicket(asWatcher).then(function () {
+      connect();
+    }).catch(function (err) {
+      fail(err && err.message ? err.message : 'Could not reach the match service.');
+    });
+  }
+
+  function copyInvite() {
+    var link = inviteLink();
+    if (!link) return;
+    var done = function () {
+      els.shareCopy.textContent = 'copied';
+      setTimeout(function () { els.shareCopy.textContent = 'copy link'; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(done).catch(function () { fallbackCopy(link, done); });
+    } else {
+      fallbackCopy(link, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
+    var area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand('copy'); done(); } catch (e) { /* ignore */ }
+    area.remove();
+  }
+
+  function clearInviteParam() {
+    try {
+      var url = new URL(location.href);
+      if (!url.searchParams.has('room')) return;
+      url.searchParams.delete('room');
+      history.replaceState(null, '', url.pathname + (url.search ? url.search : '') + url.hash);
+    } catch (e) { /* ignore */ }
+  }
+
   /* ---------- socket ---------- */
 
   function connect() {
     if (!ticket || !endpoints) return;
-    var url = endpoints.socket + '/' + encodeURIComponent(matchId) + '/ws?ticket=' + encodeURIComponent(ticket);
+    var url = endpoints.socket + '/' + encodeURIComponent(matchId) + '/ws?ticket=' + encodeURIComponent(ticket) +
+      '&role=' + (watching ? 'spectator' : 'player') +
+      (mode === 'room' ? '&mode=room' : '');
     try {
       socket = new WebSocket(url);
     } catch (err) {
@@ -269,7 +624,17 @@
 
     if (msg.type === 'state') {
       reconnects = 0;
-      if (msg.you && msg.you.name) me = msg.you.name;
+      if (watching && connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+      if (msg.spectator) {
+        watching = true;
+        me = '';
+        autoWatched = !!msg.auto;
+        if (autoWatched && state !== 'result') {
+          setStatus('The room already has two players. You are watching live.');
+        }
+      } else if (msg.you && msg.you.name) {
+        me = msg.you.name;
+      }
       if (pendingFinish && state === 'playing') {
         if (send(pendingFinish)) pendingFinish = null;
       }
@@ -278,6 +643,7 @@
     }
 
     if (msg.type === 'peer') {
+      if (watching) return;
       if (msg.player && msg.player.name) {
         opponent = msg.player.name;
         clearTimers();
@@ -288,6 +654,11 @@
     }
 
     if (msg.type === 'countdown') {
+      if (watching) {
+        if (state !== 'watching') setState('watching');
+        setStatus('LIVE · ROUND 1');
+        return;
+      }
       if (started) return;
       seed = msg.seed || seed;
       startMatch();
@@ -295,6 +666,18 @@
     }
 
     if (msg.type === 'progress') {
+      if (watching) {
+        var target = null;
+        for (var w = 0; w < watchPlayers.length; w++) {
+          if (watchPlayers[w].name === msg.from) target = watchPlayers[w];
+        }
+        if (target) target.score = Number(msg.score) || 0;
+        if (state === 'watching') {
+          setStatus('LIVE · ROUND ' + (Number(msg.round) || 1));
+          render();
+        }
+        return;
+      }
       if (msg.from === me) return;
       oppScore = Number(msg.score) || 0;
       if (msg.from) opponent = msg.from;
@@ -309,13 +692,20 @@
     }
 
     if (msg.type === 'result') {
-      finishMatch(msg);
+      if (watching) finishWatch(msg);
+      else finishMatch(msg);
+      return;
+    }
+
+    if (msg.type === 'spectators') {
+      spectatorCount = Number(msg.count) || 0;
+      if (state === 'matched' || state === 'watching') render();
       return;
     }
 
     if (msg.type === 'peer_left') {
-      if (state === 'playing' || state === 'matched') {
-        setStatus((msg.player || 'Opponent') + ' left the match.');
+      if (state === 'playing' || state === 'matched' || state === 'watching') {
+        setStatus((msg.player || 'Opponent') + ' left the room.');
       }
       return;
     }
@@ -323,10 +713,60 @@
     if (msg.type === 'error') {
       if (msg.code === 'ticket_required') fail('Your match ticket expired. Sign in again.');
       else if (msg.code === 'match_full') fail('That match is already full.');
+      else if (msg.code === 'spectator_full') fail('This room has reached its spectator limit.');
+      else if (msg.code === 'read_only') setStatus('Spectators cannot send game actions.');
+      else if (msg.code === 'players_only') fail('Spectator tickets cannot join the queue.');
     }
   }
 
+  function applyWatch(match) {
+    if (match.code) roomCode = match.code;
+    spectatorCount = Number(match.spectators) || 0;
+    watchPlayers = (Array.isArray(match.players) ? match.players : []).map(function (p) {
+      return { name: p.name, score: Number(p.score) || 0, done: !!p.done };
+    });
+
+    if (match.status === 'result') {
+      finishWatch({ winner: match.winner, players: match.players || [] });
+      return;
+    }
+
+    if (state !== 'watching') setState('watching');
+    else render();
+
+    if (match.status === 'open') {
+      setStatus('Waiting for two players. Share the invite link.');
+    } else if (match.status === 'countdown') {
+      setStatus('LIVE · ROUND 1');
+    } else {
+      setStatus('LIVE · ROUND ' + (Number(match.round) || 1));
+    }
+  }
+
+  function finishWatch(msg) {
+    clearTimers();
+    var players = Array.isArray(msg.players) ? msg.players : [];
+    watchPlayers = players.map(function (p) {
+      return { name: p.name, score: Number(p.score) || 0, done: !!p.done };
+    });
+    var a = watchPlayers[0];
+    var b = watchPlayers[1];
+    var winner = msg.winner;
+    els.kicker.textContent = 'SPECTATING · ' + (roomCode ? 'ROOM ' + roomCode : String(matchId).slice(0, 8).toUpperCase());
+    els.title.textContent = winner == null ? 'DRAW' : String(winner).toUpperCase() + ' WINS';
+    els.lede.textContent = a && b
+      ? a.name + ' ' + fmt(a.score) + ' · ' + b.name + ' ' + fmt(b.score)
+      : 'The room finished.';
+    setStatus(winner == null ? 'Dead heat.' : winner + ' takes it.');
+    setState('result');
+    showHud(false);
+    syncEmotes();
+  }
+
   function applyMatch(match) {
+    if (watching) return applyWatch(match);
+    if (match.code) roomCode = match.code;
+    if (match.spectators != null) spectatorCount = Number(match.spectators) || 0;
     var players = Array.isArray(match.players) ? match.players : [];
     if (!me) {
       var you = players.find(function (p) { return p.connected; });
@@ -359,6 +799,8 @@
       } else if (state !== 'matched') {
         setState('matched');
         setStatus('Waiting for an opponent to join…');
+      } else {
+        render();
       }
       return;
     }
@@ -375,6 +817,8 @@
     clearTimers();
     myScore = 0;
     oppScore = 0;
+    els.hudTag.textContent = mode === 'ghost' ? 'GHOST' : mode === 'room' ? 'ROOM' : '1V1';
+    els.hud.classList.toggle('ghost', mode === 'ghost');
     updateHud();
     setState('playing');
     showHud(true);
@@ -430,6 +874,7 @@
     if (state !== 'playing') return;
     myScore = Number(data.score) || 0;
     updateHud();
+    if (mode === 'ghost') return;
     send({ type: 'progress', round: data.round, correct: data.correct, score: myScore });
   }
 
@@ -437,6 +882,7 @@
     if (state !== 'playing') return;
     myScore = Number(data.score) || 0;
     updateHud();
+    if (mode === 'ghost') { ghostResult(); return; }
     setStatus('Run complete. Waiting for ' + (opponent || 'the opponent') + '…');
     var payload = { type: 'finish', score: myScore, bpi: Number(data.bpi) || 0 };
     if (!send(payload)) pendingFinish = payload;
@@ -447,7 +893,7 @@
   }
 
   function breakStart() {
-    if (state === 'playing') els.emotes.hidden = false;
+    if (state === 'playing' && mode === 'duel') els.emotes.hidden = false;
   }
 
   function bubble(name, id) {
@@ -500,11 +946,22 @@
       socket = null;
     }
     state = 'idle';
+    mode = 'duel';
+    watching = false;
+    autoWatched = false;
     started = false;
     rematchSent = false;
     pendingFinish = null;
+    ghost = null;
+    ghostTrack = null;
+    roomCode = '';
+    spectatorCount = 0;
+    watchPlayers = [];
     me = opponent = matchId = seed = '';
     myScore = oppScore = 0;
+    els.hudTag.textContent = '1V1';
+    els.primary.hidden = false;
+    clearInviteParam();
     showScreen(false);
     showHud(false);
     els.emotes.hidden = true;
@@ -517,16 +974,28 @@
         if (window.TileRush && TileRush.openAuth) TileRush.openAuth(false);
         return;
       }
+      if (mode === 'room') { joinRoom(); return; }
       startQueue();
       return;
     }
     if (state === 'queue') { cancelQueue(); return; }
     if (state === 'matched') { ready(); return; }
-    if (state === 'result') { rematch(); return; }
+    if (state === 'result') {
+      if (watching) return;
+      if (mode === 'ghost') goGhost();
+      else rematch();
+      return;
+    }
   }
 
   function open() {
     if (state !== 'idle') return;
+    mode = 'duel';
+    watching = false;
+    roomCode = '';
+    matchId = '';
+    clearInviteParam();
+    els.hudTag.textContent = '1V1';
     if (!signedIn()) {
       setState('lobby');
       setStatus('Sign in to queue. Accounts keep matches fair and rated.');
@@ -544,6 +1013,18 @@
     else leave();
   });
   els.enter.addEventListener('click', open);
+  els.ghostEntry.addEventListener('click', goGhost);
+  els.ghostBtn.addEventListener('click', goGhost);
+  els.roomCreate.addEventListener('click', createRoom);
+  els.roomJoin.addEventListener('click', joinRoom);
+  els.roomWatch.addEventListener('click', watchRoom);
+  els.roomInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      joinRoom();
+    }
+  });
+  els.shareCopy.addEventListener('click', copyInvite);
 
   els.emotes.addEventListener('click', function (event) {
     var button = event.target.closest ? event.target.closest('button[data-emote]') : null;
@@ -552,8 +1033,19 @@
     if (send({ type: 'emote', id: id })) bubble('YOU', id);
   });
 
+  /* Invite links: /?room=CODE opens this lobby with the code filled in. */
+  var invited = new URLSearchParams(location.search).get('room');
+  if (invited) {
+    if (window.Account && Account.ready) Account.ready().then(function () { openRoom(invited); });
+    else openRoom(invited);
+  }
+
   window.Duel = {
     open: open,
+    ghost: goGhost,
+    openRoom: openRoom,
+    watchRoom: watchRoom,
+    room: function () { return { state: state, mode: mode, watching: watching, code: roomCode, id: matchId }; },
     active: function () { return state !== 'idle'; },
     primary: primary,
     leave: leave,
@@ -567,11 +1059,22 @@
       clearTimers();
       if (socket) { try { socket.close(); } catch (e) { /* ignore */ } socket = null; }
       state = 'idle';
+      mode = 'duel';
+      watching = false;
+      autoWatched = false;
       started = false;
       rematchSent = false;
       pendingFinish = null;
+      ghost = null;
+      ghostTrack = null;
+      roomCode = '';
+      spectatorCount = 0;
+      watchPlayers = [];
       me = opponent = matchId = seed = '';
       myScore = oppScore = 0;
+      els.hudTag.textContent = '1V1';
+      els.primary.hidden = false;
+      clearInviteParam();
       showScreen(false);
       showHud(false);
       els.emotes.hidden = true;

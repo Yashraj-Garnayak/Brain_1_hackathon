@@ -172,7 +172,8 @@
     trials: [], roundStats: [], roundBase: null, finalMetrics: null,
     runSymbols: {}, lastFrame: 0, lastAudio: 0, pressureLabel: '',
     eloBefore: SAVE.elo, eloDelta: 0,
-    duel: false, duelSeed: '', duelDeal: 0, duelOpp: null, duelLastSent: 0
+    duel: false, duelSeed: '', duelDeal: 0, duelOpp: null, duelLastSent: 0,
+    timeline: [], runStartedAt: 0, timelineNext: 0
   };
 
   /* ---------- deterministic boards for 1v1 ---------- */
@@ -592,6 +593,11 @@
     showScreen(el.overScreen);
     backdrop.pulse(1.4);
     if (G.duel) duelHook('finish', { score: G.score, bpi: metrics.bpi });
+
+    /* Close the trace on the final score and stop sampling. */
+    if (G.timeline.length) G.timeline[G.timeline.length - 1] = G.score;
+    G.runStartedAt = 0;
+
     submitRun({
       score: G.score,
       tier: G.maxTier,
@@ -601,6 +607,7 @@
       cycles: G.cycleCount,
       rounds: G.roundStats,
       trials: G.trials,
+      timeline: G.timeline,
       gameId: 'tile-rush'
     }, G.runId);
   }
@@ -620,6 +627,9 @@
     G.resolving = false;
     G.duelDeal = 0;
     G.duelLastSent = 0;
+    G.timeline = [];
+    G.runStartedAt = 0;
+    G.timelineNext = 0;
   }
 
   function startRun() {
@@ -640,6 +650,12 @@
     G.lastFrame = now();
     G.eloBefore = SAVE.elo;
     G.countdownNum = 0;
+
+    /* One cumulative-score sample per second, from the countdown onward, so the
+       run can be replayed as a ghost later. */
+    G.runStartedAt = G.lastFrame;
+    G.timeline = [0];
+    G.timelineNext = 1000;
 
     showScreen(null);
     buildGrid(G.size);
@@ -1042,6 +1058,15 @@
   /* ---------- main loop ---------- */
   function loop(t) {
     requestAnimationFrame(loop);
+
+    /* Sample the run clock (countdown, play and breaks) once per second. */
+    if (G.runStartedAt && G.timeline.length < 120) {
+      var sampleDue = Math.floor((t - G.runStartedAt) / 1000);
+      while (G.timeline.length <= sampleDue && G.timeline.length < 120) {
+        G.timeline.push(Math.round(G.score));
+      }
+    }
+
     if (G.state === 'playing') {
       if (!G.lastFrame) G.lastFrame = t;
       var dt = clamp((t - G.lastFrame) / 1000, 0, 0.1);

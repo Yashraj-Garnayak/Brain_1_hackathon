@@ -1,6 +1,6 @@
 # TILE RUSH
 
-A browser reflex trainer built around **target updating**: find the one tile that matches a shape-and-colour target while the board keeps moving. Three rounds, a non-stopping clock, procedural pressure music, an Elo-style duel rating, accounts, a **0–1000 Brain Performance Index (BPI)**, titles, seasonal stats, and layered global/regional leaderboards.
+A browser reflex trainer built around **target updating**: find the one tile that matches a shape-and-colour target while the board keeps moving. Three rounds, a non-stopping clock, procedural pressure music, an Elo-style duel rating, accounts, a **0–1000 Brain Performance Index (BPI)**, titles, seasonal stats, and layered global/regional leaderboards. Everything — solo, 1v1, ghost races and private spectator rooms — lives on one URL and one single-page client.
 
 The client is plain HTML/CSS/JS with no build step. Accounts, runs, profiles and leaderboards are Neon Postgres behind Vercel serverless functions in `api/`. Realtime 1v1 runs on a Cloudflare Worker with Durable Objects in `worker/` — see [1v1 duels](#1v1-duels).
 
@@ -35,7 +35,7 @@ Every run is the same fixed format, so BPI is comparable between players and acr
 | 3 | 5×5 | 10 s | every 1.5 s | 6 correct |
 
 - 3-second masked countdown before round 1: target and tiles are blurred until GO, so nobody can pre-scan.
-- **5-second breaks** between rounds show the round summary and a breathing prompt. This is also where 1v1 emotes will live.
+- **5-second breaks** between rounds show the round summary and a breathing prompt. This is also where 1v1 and room emotes live.
 - Tile size adapts to the viewport so 4×4 and 5×5 fit without scrolling on phones.
 - Total play time is 60 s (25 + 5 + 15 + 5 + 10); the countdown is extra.
 - One wrong tap costs 1 second, 30 points and your streak. An unanswered churn is a miss.
@@ -145,9 +145,10 @@ delta    = clamp(K × (actual − expected), −60, +60)
 | `GET` | `/api/auth/me` | Current account (or `null`) and touch `last_seen` |
 | `POST` | `/api/runs` | Submit a ranked run; returns BPI, title, server rating |
 | `GET` | `/api/leaderboard?by=bpi\|score\|rating&scope=global\|country\|region&period=week\|season&game=tile-rush` | Ranked players, your rank, totals |
-| `GET` | `/api/users/:username?game=tile-rush` | Public profile (`self` is `null` for other players) |
+| `GET` | `/api/users/:username?game=tile-rush` | Public profile (`self` is `null` for other players); every season carries averaged BPI axes, only the owner also gets run history |
 | `POST` | `/api/profile` | Update your avatar |
-| `POST` | `/api/match/ticket` | Short-lived signed ticket + Worker URLs for 1v1 |
+| `GET` | `/api/ghost` | Your best run as a replayable 1 Hz score timeline |
+| `POST` | `/api/match/ticket` | Short-lived signed ticket + Worker URLs for 1v1 (body `{spectator:true}` mints a read-only ticket; guests need no account) |
 
 ## Data model
 
@@ -167,15 +168,17 @@ js/audio.js          WebAudio sequencer + SFX
 js/background.js     canvas backdrop
 js/account.js        auth/session + profile + leaderboard client
 js/game.js           state machine, three rounds, scoring, UI
-js/duel.js           1v1 queue, socket, emotes, result overlay
-js/profile.js        profile, BPI radar, season switcher + sparkline
+js/duel.js           1v1 queue, sockets, ghost race, rooms + spectator view
+js/profile.js        profile, BPI radar, expandable season history
 api/auth/*.js        register / login / logout / me
 api/runs.js          ranked run submission (authoritative BPI + Elo)
+api/ghost.js         best-run ghost endpoint
 api/leaderboard.js   layered weekly/seasonal boards
 api/users/[username].js  public profile
 api/profile.js       avatar update
-api/match/ticket.js  signed 1v1 ticket for the Cloudflare Worker
+api/match/ticket.js  signed 1v1/spectator ticket for the Cloudflare Worker
 lib/match-ticket.js  HMAC ticket mint + Worker endpoints
+lib/ghost.js         timeline cleaning + legacy ghost synthesis
 shared/bpi.js        canonical BPI axes, titles, archetypes, feedback
 lib/auth.js          scrypt, cookies, sessions, geo
 lib/db.js            pooled Neon connection
@@ -198,6 +201,18 @@ worker/              Cloudflare Worker + Durable Objects scaffold
 3. Both sockets open `/api/match/:id/ws?ticket=…`. The Worker verifies the ticket on every connection and passes the identity to `MatchRoom`; client-supplied names are ignored.
 4. Ready → shared 3-second countdown → three rounds. Scores stream to the opponent, emotes unlock during breaks, and both runs are submitted to `/api/runs` so they count for BPI, Elo, seasons and leaderboards.
 5. Rematch resets the match with a fresh seed; leaving closes the socket.
+
+### Ghost races
+
+**RACE YOUR BEST** (menu or duel lobby) loads `GET /api/ghost`, which returns your highest-scoring run and its `timeline` — the cumulative score sampled once per second from the countdown to the finish. The client runs the normal three rounds beside a local ticker that replays that curve, so there is no second player and no waiting. Submitting a run closes its timeline on the final score; the server drops a trace that disagrees with the score by more than `max(200, score × 0.2)` and synthesises one from per-round scores for older runs. The result overlay is local (`NEW BEST` / `TIED YOUR BEST` / `DEFEAT`) with **RACE AGAIN**.
+
+### Private rooms + spectators
+
+**CREATE ROOM** makes a 6-character code (no `0/O/1/I/L`) and opens the room socket directly, with no queue. The invite link is always the same site: `https://tile-rush.uday.live/?room=CODE` (or type the code, or a match id, into the lobby). The first two players to connect take the player slots; everyone after that is seated read-only as a spectator, up to 20 per room. Spectators get live state, progress, break emotes and the final result, but cannot ready up, send progress, finish or rematch. Guests can watch without an account via a spectator-only signed ticket.
+
+Spectator sockets use `GET /api/match/:id/ws?ticket=…&role=spectator&mode=room`. The Worker verifies the ticket, adds `x-tr-role` / `x-tr-kind` / `x-tr-room`, and `MatchRoom` enforces the role — the query string alone can never promote a spectator ticket into a player slot. Room matches also count toward BPI, Elo and seasons because both players still submit through `/api/runs`.
+
+Profiles render each season's averaged radar and, for the owner only, the runs behind it; clicking a season expands the full dashboard (stats, fingerprint, run list) inline.
 
 The realtime layer runs on a Cloudflare Worker with Durable Objects; the REST API stays on Vercel/Neon. **No paid plan is needed:** Workers Free includes SQLite-backed Durable Objects (our config uses `new_sqlite_classes`), with 100k DO requests/day, 13k GB-s/day and 1 GB storage per object. Static assets are not counted against the Worker quota.
 

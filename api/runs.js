@@ -5,6 +5,7 @@ const { currentUser } = require('../lib/auth');
 const { recordRun, publicUser } = require('../lib/users');
 const { geoFromRequest } = require('../lib/geo');
 const { keysFor } = require('../lib/season');
+const { cleanTimeline } = require('../lib/ghost');
 const bpi = require('../shared/bpi');
 
 function cleanRounds(input) {
@@ -53,6 +54,15 @@ module.exports = async function handler(req, res) {
 
     const trials = Array.isArray(body.trials) ? body.trials.slice(0, 400) : [];
     const rounds = cleanRounds(body.rounds);
+
+    /* A ghost is only useful if the trace agrees with the final score; drop
+       anything that does not, and never trust more than two minutes of it. */
+    let timeline = cleanTimeline(body.timeline);
+    if (timeline.length < 2) timeline = null;
+    else if (Math.abs(timeline[timeline.length - 1] - score) > Math.max(200, score * 0.2)) {
+      timeline = null;
+    }
+
     const metrics = bpi.compute({
       trials, misses, cycles, maxTier: tier, score
     });
@@ -79,6 +89,7 @@ module.exports = async function handler(req, res) {
       gameId,
       seasonKey: keys.seasonKey,
       weekKey: keys.weekKey,
+      timeline,
       country: geo.country || user.country || null,
       region: geo.region || user.region || null,
       stats: {
