@@ -205,32 +205,29 @@
       out.p = ['Based on what held you back most this ' + periodWord(c) + ':'];
       out.list = tips;
     }
-    var best = bestHour(c.data.hours);
-    if (best) out.foot = 'You were fastest around ' + pad(best.hour) + ':00, so that\'s a good time for serious runs.';
+    var w = c.data.best_window;
+    if (w) out.foot = 'You were fastest in the ' + w.label.toLowerCase() + ' (' + windowTime(w) + '), so that\'s a good time for serious runs.';
     return out;
   }
 
-  function bestHour(hours) {
-    var used = (hours || []).filter(function (h) { return h.runs > 0; });
-    if (used.length < 2) return null;
-    return used.reduce(function (a, h) { return h.avg_rt < a.avg_rt ? h : a; });
-  }
+  function windowTime(w) { return pad(w.start_hour) + ':00–' + pad(w.end_hour) + ':00'; }
 
   function bestTime(c) {
     var missing = needData(c);
     if (missing) return missing;
-    var hours = c.data.hours.filter(function (h) { return h.runs > 0; });
-    if (hours.length < 2) return { p: ['You only played in one hour of the day this ' + periodWord(c) + ', so there\'s nothing to compare yet. Try a few runs at different times.'] };
-    var best = bestHour(hours);
-    var worst = hours.reduce(function (a, h) { return h.avg_rt > a.avg_rt ? h : a; });
-    return {
+    var w = c.data.best_window;
+    if (!w) return { p: ['There isn\'t a clear best time yet this ' + periodWord(c) + '. Play a few runs at different times of day and I\'ll be able to tell.'] };
+    var out = {
       title: 'Best time to play',
-      p: [
-        'This ' + periodWord(c) + ' you were fastest around ' + pad(best.hour) + ':00, averaging ' + best.avg_rt + ' ms over ' + best.runs + (best.runs === 1 ? ' run.' : ' runs.'),
-        'Slowest was around ' + pad(worst.hour) + ':00 at ' + worst.avg_rt + ' ms, ' + (worst.avg_rt - best.avg_rt) + ' ms slower.' +
-          (worst.hour >= 23 || worst.hour < 4 ? ' Late nights tend to do that.' : '')
-      ]
+      p: ['This ' + periodWord(c) + ' your best time was the ' + w.label.toLowerCase() + ', ' + windowTime(w) + '. You averaged ' + w.avg_rt + ' ms there, ' + w.diff + ' ms faster than your other runs.']
     };
+    if (w.reasons.length) {
+      out.p.push('Why, based on your ring:');
+      out.list = w.reasons;
+    } else {
+      out.p.push('Nothing in your ring data stands out for that window, so it\'s probably just when you\'re most focused.');
+    }
+    return out;
   }
 
   function duringDay(c) {

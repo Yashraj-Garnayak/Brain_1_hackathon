@@ -101,23 +101,6 @@
 
 /* Insights: game performance against ring metrics. */
 
-.in-hours { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-.in-hour {
-  flex: 0 0 auto;
-  min-width: 64px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-family: var(--mono);
-}
-.in-hour .micro { font-size: 10px; letter-spacing: .1em; color: var(--dim); }
-.in-hour b { font-size: 15px; }
-.in-hour span { font-size: 11px; color: var(--muted); }
-.in-hour.is-best { border-color: var(--accent); }
-.in-hour.is-best b { color: var(--accent); }
 
 .in-days { display: flex; flex-direction: column; gap: 12px; }
 .in-day {
@@ -285,10 +268,6 @@ button.in-cal-cell:hover { border-color: var(--line-strong); }
 .in-block { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .in-block h3 { margin: 0; font-size: 15px; }
 .in-block .hm-note { margin: 0; }
-.in-hurt { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.in-hurt li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
-.in-hurt li:last-child { border-bottom: 0; padding-bottom: 0; }
-.in-hurt b { font-family: var(--mono); font-size: 12px; color: var(--hot); font-weight: 600; white-space: nowrap; }
 
 /* Built-in insights helper (js/assistant.js). */
 .in-ask {
@@ -395,3 +374,18 @@ button.in-cal-cell:hover { border-color: var(--line-strong); }
   .as-panel { right: 0; left: 0; bottom: 0; width: 100%; height: 78vh; border-radius: var(--r) var(--r) 0 0; }
   .as-fab { right: 12px; bottom: 12px; }
 }
+
+/* Best time of day: one window and why it worked. */
+.in-window { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.in-window-name { font-size: 22px; font-weight: 700; color: var(--accent); }
+.in-window-time { font-family: var(--mono); font-size: 14px; color: var(--ink); }
+.in-window-stat { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.in-window-stat b { color: var(--ink); font-weight: 600; }
+.in-window-stat b.is-good { color: var(--accent); }
+.in-window.is-worst .in-window-name { color: var(--hot); }
+.in-window-stat b.is-bad { color: var(--hot); }
+
+/* Ring numbers in a day card, as tiles. */
+.in-ring-grid .hm-tile .micro { display: flex; align-items: center; gap: 2px; }
+.in-ring-grid .hm-tile b { font-size: 20px; }
+.in-ring-grid .in-ask { margin-left: 4px; }

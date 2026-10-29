@@ -44,10 +44,8 @@
   var periodBody = document.getElementById('periodBody');
   var periodTiles = document.getElementById('periodTiles');
   var periodRing = document.getElementById('periodRing');
-  var periodHurt = document.getElementById('periodHurt');
-  var hoursBlock = document.getElementById('hoursBlock');
-  var hurtBlock = document.getElementById('hurtBlock');
-  var insightsHours = document.getElementById('insightsHours');
+  var bestWindowEl = document.getElementById('bestWindow');
+  var worstWindowEl = document.getElementById('worstWindow');
   var calGrid = document.getElementById('calGrid');
   var insightsDays = document.getElementById('insightsDays');
 
@@ -180,12 +178,8 @@
         }).join('')
       : '';
 
-    insightsHours.innerHTML = renderHours(data.hours);
-    hoursBlock.hidden = !data.hours.length;
-    periodHurt.innerHTML = s.top_hurt.map(function (f) {
-      return '<li><span>' + esc(f.label) + '</span><b>' + f.days + ' of ' + s.days_played + ' days</b></li>';
-    }).join('');
-    hurtBlock.hidden = !s.top_hurt.length;
+    bestWindowEl.innerHTML = renderWindow(data.best_window, 'best');
+    worstWindowEl.innerHTML = renderWindow(data.worst_window, 'worst');
 
     var byDay = {};
     data.days.forEach(function (d) { byDay[d.day] = d; });
@@ -196,16 +190,38 @@
     renderSelected();
   }
 
-  function renderHours(hours) {
-    if (!hours.length) return '';
-    var best = hours.reduce(function (a, h) { return h.avg_rt < a.avg_rt ? h : a; });
-    return hours.map(function (h) {
-      return '<div class="in-hour' + (h === best && hours.length > 1 ? ' is-best' : '') + '">' +
-        '<span class="micro">' + pad(h.hour) + ':00</span>' +
-        '<b>' + esc(h.avg_rt) + 'ms</b>' +
-        '<span>' + esc(h.runs) + (h.runs === 1 ? ' run' : ' runs') + '</span>' +
-        '</div>';
-    }).join('');
+  // One window of the day and why it worked, from data.best_window.
+  // One window of the day and why it went well or badly, from data.best_window / worst_window.
+  var WINDOW_TEXT = {
+    best: {
+      empty: 'Play at a few different times of day and this will show when you\'re sharpest, and why.',
+      why: 'WHY IT WORKED', diff: 'faster', tone: 'good', factors: 'help',
+      none: 'Nothing in your ring data stands out for this window, so it\'s likely just when you\'re most focused.'
+    },
+    worst: {
+      empty: 'Play at a few different times of day and this will show when you\'re slowest, and why.',
+      why: 'WHAT SLOWED YOU DOWN', diff: 'slower', tone: 'bad', factors: 'hurt',
+      none: 'Your sleep, heart rate and activity looked normal for these runs, so it\'s more likely focus or distraction.'
+    }
+  };
+
+  function renderWindow(w, kind) {
+    var t = WINDOW_TEXT[kind];
+    if (!w) return '<p class="hm-empty">' + esc(t.empty) + '</p>';
+    var context = [];
+    if (w.awake) context.push('awake about ' + w.awake);
+    if (w.hr_at_play != null) context.push('heart rate around ' + w.hr_at_play + ' bpm');
+    var why = w.reasons.length
+      ? '<span class="micro">' + t.why + '</span><ul>' + w.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>'
+      : '<p class="hm-note">' + esc(t.none) +
+        (context.length ? ' When you played then you were ' + esc(context.join(', ')) + '.' : '') + '</p>';
+    return '<div class="in-window is-' + kind + '">' +
+      '<b class="in-window-name">' + esc(w.label) + '</b>' +
+      '<span class="in-window-time">' + pad(w.start_hour) + ':00 – ' + pad(w.end_hour) + ':00</span>' +
+      '</div>' +
+      '<p class="in-window-stat"><b>' + esc(w.avg_rt) + ' ms</b> average over ' + w.runs + ' runs, ' +
+        '<b class="is-' + t.tone + '">' + esc(w.diff) + ' ms ' + t.diff + '</b> than your other runs (' + esc(w.other_rt) + ' ms).</p>' +
+      '<div class="in-factors is-' + t.factors + '">' + why + '</div>';
   }
 
   /* ---------- week strip / month calendar ---------- */
@@ -252,20 +268,26 @@
 
   function ringLine(r) {
     if (!r) return '<p class="hm-empty">No ring data for this day.</p>';
+    var u = (state.data && state.data.summary && state.data.summary.usual_ring) || {};
+    // [label, value, unit, helper term, usual value]
     var bits = [
-      ['Recovery', r.recovery_index, '', 'recovery'],
-      ['Sleep', r.sleep_score, '', 'sleep_score'],
-      ['Slept', r.total_sleep_min != null ? duration(r.total_sleep_min) : null, '', 'total_sleep'],
-      ['HRV', r.hrv_avg, 'ms', 'hrv'],
-      ['Resting HR', r.night_rhr, 'bpm', 'rhr'],
-      ['Deep', r.deep_sleep_min != null ? duration(r.deep_sleep_min) : null, '', 'deep'],
-      ['REM', r.rem_sleep_min != null ? duration(r.rem_sleep_min) : null, '', 'rem'],
-      ['Steps', r.steps != null ? r.steps.toLocaleString() : null, '', '']
+      ['Recovery', r.recovery_index, '', 'recovery', u.recovery_index],
+      ['Sleep score', r.sleep_score, '', 'sleep_score', u.sleep_score],
+      ['Slept', r.total_sleep_min != null ? duration(r.total_sleep_min) : null, '', 'total_sleep', u.total_sleep_min != null ? duration(u.total_sleep_min) : null],
+      ['HRV', r.hrv_avg, 'ms', 'hrv', u.hrv_avg],
+      ['Resting HR', r.night_rhr, 'bpm', 'rhr', u.night_rhr],
+      ['Deep sleep', r.deep_sleep_min != null ? duration(r.deep_sleep_min) : null, '', 'deep', null],
+      ['REM sleep', r.rem_sleep_min != null ? duration(r.rem_sleep_min) : null, '', 'rem', null],
+      ['Steps', r.steps != null ? r.steps.toLocaleString() : null, '', '', null]
     ].filter(function (b) { return b[1] != null; });
     if (!bits.length) return '<p class="hm-empty">Ring has not processed this day yet.</p>';
-    return '<div class="in-ring">' + bits.map(function (b) {
+    return '<div class="hm-grid in-ring-grid">' + bits.map(function (b) {
       var ask = b[3] ? '<button type="button" class="in-ask" data-ask="' + b[3] + '" aria-label="What is ' + esc(b[0]) + '?">?</button>' : '';
-      return '<span>' + esc(b[0]) + ask + ' <b>' + esc(b[1]) + esc(b[2]) + '</b></span>';
+      return '<div class="hm-tile">' +
+        '<span class="micro">' + esc(b[0].toUpperCase()) + ask + '</span>' +
+        '<b>' + esc(b[1]) + (b[2] ? '<small>' + esc(b[2]) + '</small>' : '') + '</b>' +
+        (b[4] != null ? '<span class="hm-note">usual ' + esc(b[4]) + esc(b[2] ? ' ' + b[2] : '') + '</span>' : '') +
+        '</div>';
     }).join('') + '</div>';
   }
 
