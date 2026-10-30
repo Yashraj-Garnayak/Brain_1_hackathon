@@ -2,6 +2,7 @@
 .preview/
 .vercel
 .env*
+!.env.example
 node_modules/
 worker/public/
 worker/.wrangler/
