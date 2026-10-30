@@ -308,7 +308,7 @@
       var b = watchPlayers[1] || null;
       els.kicker.textContent = 'SPECTATING · ' + (roomCode ? 'ROOM ' + roomCode : String(matchId).slice(0, 8).toUpperCase());
       els.title.textContent = 'LIVE';
-      els.lede.textContent = 'You are watching read-only. Player emotes appear here; use the toggle to mute them.';
+      els.lede.textContent = 'You are watching read-only. Boards show each player\'s last tap; player emotes appear here, with a mute toggle.';
       els.versus.hidden = false;
       els.youLabel.textContent = 'PLAYER 1';
       els.oppLabel.textContent = 'PLAYER 2';
