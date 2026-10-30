@@ -128,7 +128,7 @@
   }
 
   document.addEventListener('click', function (event) {
-    var badge = event.target.closest ? event.target.closest('.profile-title, .profile-arch, .bpi-title, .bpi-arch, .intro-title') : null;
+    var badge = event.target.closest ? event.target.closest('.profile-title, .profile-arch, .bpi-title, .bpi-arch, .intro-title, .board-title-badge') : null;
     if (badge) {
       var kind = /arch/.test(badge.className) ? 'archetype' : 'title';
       open(kind, badge.textContent);

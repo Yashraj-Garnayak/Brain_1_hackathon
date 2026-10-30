@@ -1748,7 +1748,7 @@
             '<span class="board-avatar' + (row.avatar ? ' has-photo' : '') + '">' + avatarInner(row) + '</span>' +
             '<span class="board-name">' + row.username +
               (mine ? '<span class="board-you">YOU</span>' : '') +
-              '<small style="color:' + titleColor(row.title) + '">' + (row.title || 'DRIFTER') +
+              '<small class="board-title-badge" style="color:' + titleColor(row.title) + '">' + (row.title || 'DRIFTER') +
               ' · ' + row.games + (row.games === 1 ? ' run' : ' runs') + '</small>' +
             '</span>' +
           '</span>' +

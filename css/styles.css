@@ -2873,11 +2873,11 @@ html:has(.screen.show), body:has(.screen.show) { overflow: hidden; }
 }
 
 /* --- title + fingerprint explainer ---------------------------------- */
-.profile-title, .profile-arch, .bpi-title, .bpi-arch, .intro-title {
+.profile-title, .profile-arch, .bpi-title, .bpi-arch, .intro-title, .board-title-badge {
   cursor: pointer;
   transition: border-color .15s, background .15s, color .15s;
 }
-.profile-title:hover, .profile-arch:hover, .bpi-title:hover, .bpi-arch:hover, .intro-title:hover {
+.profile-title:hover, .profile-arch:hover, .bpi-title:hover, .bpi-arch:hover, .intro-title:hover, .board-title-badge:hover {
   border-color: rgba(94, 234, 212, .55);
   background: rgba(94, 234, 212, .1);
 }
