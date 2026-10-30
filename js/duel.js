@@ -30,6 +30,7 @@
     room: $('duelRoom'), roomInput: $('roomCodeInput'),
     watchBoards: $('watchBoards'), watchSwitch: $('watchSwitch'),
     watchEmoteBar: $('watchEmoteBar'), watchEmoteToggle: $('watchEmoteToggle'),
+    watchEmoteFeed: $('watchEmoteFeed'),
     roomSettings: $('roomSettings'),
     roomJoin: $('roomJoinBtn'), roomWatch: $('roomWatchBtn'), roomCreate: $('roomCreateBtn')
   };
@@ -61,6 +62,7 @@
   var roomTheme = 'kids';
   var roomSpectatorEmotes = true;
   var isCreator = false;
+  var watchEmoteLog = [];
   var me = '';
   var opponent = '';
   var myScore = 0;
@@ -858,7 +860,13 @@
     if (msg.type === 'emote') {
       if (msg.from === me) return;
       if (watching && (!spectatorEmotes || !roomSpectatorEmotes)) return;
-      bubble(msg.from || 'OPPONENT', msg.emoji, msg.text, msg.id);
+      var emoteFrom = msg.from || 'OPPONENT';
+      if (watching) {
+        watchEmoteLog.push({ from: emoteFrom, emoji: msg.emoji || '', text: msg.text || msg.id || '' });
+        if (watchEmoteLog.length > 8) watchEmoteLog.shift();
+        renderWatchEmoteFeed();
+      }
+      bubble(emoteFrom, msg.emoji, msg.text, msg.id);
       return;
     }
 
@@ -1053,18 +1061,25 @@
   function finishWatch(msg) {
     clearTimers();
     var players = Array.isArray(msg.players) ? msg.players : [];
+    var previous = {};
+    watchPlayers.forEach(function (p) { previous[p.name] = p; });
+    function num(value, fallback) {
+      return value != null && isFinite(Number(value)) ? Number(value) : fallback;
+    }
     watchPlayers = players.map(function (p) {
+      var old = previous[p.name] || {};
       return {
         name: p.name,
-        score: Number(p.score) || 0,
-        bpi: Number(p.bpi) || 0,
+        score: num(p.score, 0),
+        bpi: num(p.bpi, 0),
         done: true,
-        round: 3,
-        deal: 0,
-        correct: 0,
-        wrong: 0,
-        misses: 0,
-        streak: 0
+        round: num(p.round, old.round || 3),
+        deal: num(p.deal, old.deal || 0),
+        correct: num(p.correct, old.correct || 0),
+        wrong: num(p.wrong, old.wrong || 0),
+        misses: num(p.misses, old.misses || 0),
+        streak: num(p.streak, old.streak || 0),
+        lastInput: p.lastInput || old.lastInput || null
       };
     });
     var a = watchPlayers[0];

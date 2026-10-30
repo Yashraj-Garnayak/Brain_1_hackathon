@@ -2048,25 +2048,26 @@ body.no-motion .screen-card { transform: none; }
 .watch-goal {
   display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 26px;
-  margin-bottom: 7px;
+  gap: 10px;
+  min-height: 42px;
+  margin-bottom: 9px;
 }
 .watch-target {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .04);
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .05);
 }
-.watch-target .glyph { width: 17px; height: 17px; filter: drop-shadow(0 0 5px currentColor); }
+.watch-target .glyph { width: 28px; height: 28px; filter: drop-shadow(0 0 7px currentColor); }
 .watch-goal em {
   font-style: normal;
   font-family: var(--mono);
-  font-size: 7px;
-  color: var(--muted);
+  font-size: 9.5px;
+  color: var(--ink);
   text-transform: uppercase;
   letter-spacing: .06em;
 }
@@ -2449,7 +2450,7 @@ body.spectating .duel-card {
   .watch-board .watch-head { flex: 0 0 auto; }
   .watch-board .watch-meta,
   .watch-board .watch-score { display: none; }
-  .watch-board .watch-goal { flex: 0 0 auto; justify-content: center; margin-bottom: 8px; }
+  .watch-board .watch-goal { flex: 0 0 auto; justify-content: center; margin-bottom: 10px; }
   .watch-board .watch-grid {
     flex: 1 1 auto;
     min-height: 0;
@@ -2461,6 +2462,9 @@ body.spectating .duel-card {
     gap: 8px;
   }
   .watch-name { max-width: none; font-size: 14px; }
+  .watch-target { width: 46px; height: 46px; }
+  .watch-target .glyph { width: 32px; height: 32px; }
+  .watch-goal em { font-size: 11px; }
   .watch-tile { border-radius: 10px; }
   .watch-tile .glyph { width: 72%; height: 72%; }
 }
@@ -2982,10 +2986,42 @@ body.badge-open { overflow: hidden; }
 /* Spectator emote feed toggle. */
 .watch-emote-bar {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   margin-top: 10px;
+}
+.watch-emote-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.watch-emote-head .micro { flex: 1; }
+.watch-emote-feed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.watch-emote-feed:empty { display: none; }
+.watch-emote-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid rgba(94, 234, 212, .28);
+  border-radius: 999px;
+  background: rgba(94, 234, 212, .08);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--ink);
+  max-width: 260px;
+}
+.watch-emote-chip b {
+  font-weight: 700;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .watch-emote-bar[hidden] { display: none !important; }
 .watch-emote-toggle {
