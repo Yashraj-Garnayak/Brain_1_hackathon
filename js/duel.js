@@ -841,7 +841,10 @@
   function applyWatch(match) {
     if (match.code) roomCode = match.code;
     spectatorCount = Number(match.spectators) || 0;
-    if (match.seed) matchSeed = match.seed;
+    if (match.seed) {
+      matchSeed = match.seed;
+      if (window.TileRush && TileRush.applyTheme) TileRush.applyTheme(match.seed);
+    }
     watchPlayers = (Array.isArray(match.players) ? match.players : []).map(function (p) {
       return {
         name: p.name,
@@ -926,7 +929,7 @@
       var goal = board && TS
         ? '<span class="watch-target" style="--tint:' + board.goal.color.hex + '">' +
             TS.shapeSvg(board.goal.shape, board.goal.color) +
-          '</span><em>' + board.goal.shape.id + ' · ' + board.goal.color.id + '</em>'
+          '</span><em>' + TS.label(board.goal.shape) + ' · ' + board.goal.color.id + '</em>'
         : '<em>target loads with the run</em>';
 
       metricsHtml[i] = '<aside class="watch-metrics" data-slot="' + i + '">' +

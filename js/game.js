@@ -33,7 +33,7 @@
       elo: 1000, games: 0, best: 0, bestTier: 0, bestStreak: 0,
       bestBpi: 0, title: 'DRIFTER',
       runs: [], symbols: {},
-      settings: { muted: false, motion: !reduced }
+      settings: { muted: false, motion: !reduced, theme: 'kids' }
     };
   }
   function loadSave() {
@@ -54,6 +54,7 @@
       if (d.settings) {
         base.settings.muted = !!d.settings.muted;
         if (typeof d.settings.motion === 'boolean') base.settings.motion = d.settings.motion;
+        if (d.settings.theme === 'sports') base.settings.theme = 'sports';
       }
     } catch (e) { /* private mode etc. */ }
     return base;
@@ -94,7 +95,7 @@
     pressureFill: $('pressureFill'), pressureLabel: $('pressureLabel'), pressurePct: $('pressurePct'),
     statAcc: $('statAcc'), statRt: $('statRt'), statStreak: $('statStreak'),
     weakRow: $('weakRow'), runs: $('runs'), gamesCount: $('gamesCount'), bestScore: $('bestScore'),
-    musicToggle: $('musicToggle'), motionToggle: $('motionToggle'),
+    musicToggle: $('musicToggle'), motionToggle: $('motionToggle'), symbolToggle: $('symbolToggle'),
     introScreen: $('introScreen'), introBest: $('introBest'), introBpi: $('introBpi'),
     introTitle: $('introTitle'), introElo: $('introElo'), introGames: $('introGames'),
     startBtn: $('startBtn'), resetBtn: $('resetBtn'),
@@ -384,7 +385,7 @@
       tile.className = 'tile';
       tile.style.setProperty('--tint', cell2.color.hex);
       tile.innerHTML = shapeSvg(cell2.shape, cell2.color);
-      tile.setAttribute('aria-label', 'Tile ' + (n2 + 1) + ': ' + cell2.color.id + ' ' + cell2.shape.id);
+      tile.setAttribute('aria-label', 'Tile ' + (n2 + 1) + ': ' + cell2.color.id + ' ' + TS.label(cell2.shape));
       void tile.offsetWidth;
       tile.classList.add('deal');
       var glyph = tile.firstElementChild;
@@ -414,7 +415,7 @@
 
     el.goalIcon.innerHTML = shapeSvg(goalShape, goalColor);
     el.goalIcon.dataset.goal = goal.key;
-    el.goalIcon.setAttribute('aria-label', 'Target: ' + goalColor.id + ' ' + goalShape.id);
+    el.goalIcon.setAttribute('aria-label', 'Target: ' + goalColor.id + ' ' + TS.label(goalShape));
     el.goalIcon.style.setProperty('--tint', goalColor.hex);
     el.goalCard.style.setProperty('--tint', goalColor.hex);
     el.goalTrack.classList.remove('urgent');
@@ -805,6 +806,8 @@
     audio.setMuted(SAVE.settings.muted);
 
     G.runId++;
+    G.themeSeed = G.duel ? String(G.duelSeed || 'duel') : 'solo:' + G.runId + ':' + Date.now();
+    TS.setTheme(SAVE.settings.theme, G.themeSeed);
     G.state = 'countdown';
     G.round = 0;
     G.roundId++;
@@ -1035,6 +1038,12 @@
     persist();
     updateSettingsUI();
   }
+  function toggleSymbols() {
+    SAVE.settings.theme = SAVE.settings.theme === 'sports' ? 'kids' : 'sports';
+    TS.setTheme(SAVE.settings.theme, G.themeSeed || 'preview');
+    persist();
+    updateSettingsUI();
+  }
   function updateSettingsUI() {
     el.muteIcon.textContent = SAVE.settings.muted ? '\u2715' : '\u266a';
     el.muteBtn.setAttribute('aria-pressed', SAVE.settings.muted ? 'true' : 'false');
@@ -1042,6 +1051,10 @@
     el.musicToggle.classList.toggle('off', SAVE.settings.muted);
     el.motionToggle.textContent = SAVE.settings.motion ? 'FULL' : 'LOW';
     el.motionToggle.classList.toggle('off', !SAVE.settings.motion);
+    if (el.symbolToggle) {
+      el.symbolToggle.textContent = SAVE.settings.theme === 'sports' ? 'SPORTS' : 'KIDS';
+      el.symbolToggle.classList.toggle('off', SAVE.settings.theme !== 'sports');
+    }
     document.body.classList.toggle('no-motion', !SAVE.settings.motion);
   }
 
@@ -1120,7 +1133,7 @@
     for (var j = 0; j < list.length; j++) {
       var item = list[j];
       var color = item.skill < 0.45 ? '#fb7185' : item.skill < 0.65 ? '#fbbf24' : '#8b93a7';
-      html += '<div class="weak" title="' + item.shape.id + ' \u00b7 ' + Math.round(item.skill * 100) + '% mastery">' +
+      html += '<div class="weak" title="' + TS.label(item.shape) + ' \u00b7 ' + Math.round(item.skill * 100) + '% mastery">' +
         shapeSvg(item.shape, { hex: color }) +
         '<b>' + Math.round(item.skill * 100) + '%</b></div>';
     }
@@ -2199,6 +2212,7 @@
   }
 
   document.body.classList.toggle('no-motion', !SAVE.settings.motion);
+  TS.setTheme(SAVE.settings.theme, 'preview');
   var params = new URLSearchParams(window.location.search);
   if (params.has('still')) document.body.classList.add('still');
   if (params.has('dev')) el.resetBtn.hidden = false;
@@ -2230,6 +2244,7 @@
   el.muteBtn.addEventListener('click', toggleMute);
   el.musicToggle.addEventListener('click', toggleMute);
   el.motionToggle.addEventListener('click', toggleMotion);
+  if (el.symbolToggle) el.symbolToggle.addEventListener('click', toggleSymbols);
   el.resetBtn.addEventListener('click', function () {
     if (!window.confirm('Reset your local rating, best score and adaptive history? (Your account is not affected.)')) return;
     SAVE = defaultSave();
@@ -2396,6 +2411,7 @@
     isDuel: function () { return G.duel; },
     boardAt: function (seedText, round, index) { return duelBoardAt(seedText, round, index); },
     axes: function () { return G.finalMetrics ? G.finalMetrics.axes : null; },
+    applyTheme: function (seed) { TS.setTheme(SAVE.settings.theme, seed); },
     duelAdvance: function (solvedDeal, mine) { duelAdvanceLocal(solvedDeal, !!mine); },
     setScore: function (value) {
       if (!G.duel) return;

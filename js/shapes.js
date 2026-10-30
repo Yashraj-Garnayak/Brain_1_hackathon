@@ -94,6 +94,79 @@
 
   var SHAPE_LIST = Object.keys(SHAPES).map(function (k) { return SHAPES[k]; });
 
+  /* Sports icon theme. The list has 40 items; each run maps the 16 shape
+     slots to 16 consecutive items from a seed-derived offset, so every run
+     gets a different random slice while both 1v1 clients stay in sync. */
+  var SPORTS = [
+    { emoji: '⚽', label: 'Football' },
+    { emoji: '📢', label: 'Whistle' },
+    { emoji: '🏏', label: 'Cricket bat' },
+    { emoji: '⛑️', label: 'Helmet' },
+    { emoji: '👕', label: 'Jersey' },
+    { emoji: '🏌️', label: 'Gold putter' },
+    { emoji: '🎾', label: 'Tennis racket' },
+    { emoji: '🪶', label: 'Feather shuttlecock' },
+    { emoji: '👟', label: 'Court shoes' },
+    { emoji: '🏁', label: 'Checkered flag' },
+    { emoji: '🏉', label: 'Rugby ball' },
+    { emoji: '🚧', label: 'Training cones' },
+    { emoji: '🥊', label: 'Punching bag' },
+    { emoji: '➰', label: 'Skipping rope' },
+    { emoji: '⏱️', label: 'Stopwatch' },
+    { emoji: '🏑', label: 'Hockey stick' },
+    { emoji: '🏓', label: 'Table tennis bat' },
+    { emoji: '📊', label: 'Scoreboard' },
+    { emoji: '🥅', label: 'Net' },
+    { emoji: '🧤', label: 'Gloves' },
+    { emoji: '🏸', label: 'Badminton racket' },
+    { emoji: '🦵', label: 'Shin guards' },
+    { emoji: '💪', label: 'Arm guard' },
+    { emoji: '🪵', label: 'Stumps' },
+    { emoji: '🚩', label: 'Corner flag' },
+    { emoji: '🔴', label: 'Cricket ball' },
+    { emoji: '🟥', label: 'Red card' },
+    { emoji: '🎒', label: 'Equipment bag' },
+    { emoji: '🥾', label: 'Football studs' },
+    { emoji: '⌚', label: 'Wristband' },
+    { emoji: '🧴', label: 'Water bottle' },
+    { emoji: '⛳', label: 'Golf wedge' },
+    { emoji: '🏎️', label: 'Racing suit' },
+    { emoji: '🏆', label: 'Trophy' },
+    { emoji: '🛞', label: 'Racing tyre' },
+    { emoji: '🛡️', label: 'Shoulder pads' },
+    { emoji: '😬', label: 'Mouthguard' },
+    { emoji: '🤿', label: 'Snorkel' },
+    { emoji: '🪑', label: 'Table' },
+    { emoji: '🏅', label: 'Medal' }
+  ];
+
+  var theme = 'kids';
+  var sportsOffset = 0;
+
+  function themeHash(text) {
+    var h = 0;
+    for (var i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) % 1000000007;
+    return h;
+  }
+
+  function setTheme(name, seed) {
+    theme = name === 'sports' ? 'sports' : 'kids';
+    sportsOffset = themeHash(String(seed || 'tile-rush')) % SPORTS.length;
+  }
+
+  function sportsFor(shape) {
+    var index = 0;
+    for (var i = 0; i < SHAPE_LIST.length; i++) {
+      if (SHAPE_LIST[i].id === shape.id) { index = i; break; }
+    }
+    return SPORTS[(sportsOffset + index) % SPORTS.length];
+  }
+
+  function label(shape) {
+    return theme === 'sports' ? sportsFor(shape).label : shape.id;
+  }
+
+
   var PALETTE = [
     { id: 'mint', hex: '#5eead4', group: 'cool' },
     { id: 'cyan', hex: '#38bdf8', group: 'cool' },
@@ -106,6 +179,15 @@
   ];
 
   function shapeSvg(shape, color, extraClass) {
+    if (theme === 'sports') {
+      var item = sportsFor(shape);
+      return '<svg class="glyph sports-glyph' + (extraClass ? ' ' + extraClass : '') + '" viewBox="0 0 100 100" ' +
+        'style="color:' + color.hex + '" aria-hidden="true" focusable="false">' +
+        '<circle cx="50" cy="50" r="43" fill="currentColor" opacity=".12"/>' +
+        '<circle cx="50" cy="50" r="43" fill="none" stroke="currentColor" stroke-width="4.5" opacity=".9"/>' +
+        '<text x="50" y="53" text-anchor="middle" dominant-baseline="central" font-size="50">' + item.emoji + '</text>' +
+        '</svg>';
+    }
     return '<svg class="glyph' + (extraClass ? ' ' + extraClass : '') + '" viewBox="0 0 100 100" ' +
       'style="color:' + color.hex + '" aria-hidden="true" focusable="false">' +
       shape.draw() + '</svg>';
@@ -115,6 +197,10 @@
     SHAPES: SHAPES,
     SHAPE_LIST: SHAPE_LIST,
     PALETTE: PALETTE,
-    shapeSvg: shapeSvg
+    SPORTS: SPORTS,
+    shapeSvg: shapeSvg,
+    setTheme: setTheme,
+    label: label,
+    theme: function () { return theme; }
   };
 })();

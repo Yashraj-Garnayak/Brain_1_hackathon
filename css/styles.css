@@ -3009,3 +3009,6 @@ body.badge-open { overflow: hidden; }
     width: fit-content;
   }
 }
+.sports-glyph text {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
