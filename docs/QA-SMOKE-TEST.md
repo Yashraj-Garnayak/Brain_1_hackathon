@@ -51,10 +51,16 @@ A short pass for a demo. Run it on the website and one Android device.
 
 ## Known limitations
 
-- Android room-control and spectator screens still need a final visual pass on a real device.
-- Large-screen layout should be checked on the actual mirror/TV.
-- Live ring data requires `ULTRAHUMAN_TOKEN`; without it ring values are empty.
-- APK is a debug build.
+- Ultrahuman is single-owner: only the configured `ULTRAHUMAN_USERNAME` gets ring data.
+- Ring sync happens on Insights/Health requests, not in a background cron.
+- Solo BPI is recomputed from client-submitted trials; 1v1 scores are server-authoritative.
+- No password recovery, email, OAuth or 2FA.
+- Emote presets and personal theme are device-local, not synced across devices.
+- Spectator mode is live-only, read-only and capped at 20.
+- The Ask helper is rule-based, not an LLM or medical advice.
+- Android is a debug APK, min SDK 26, portrait-locked; no Play Store release or iOS app.
+- Large-screen layouts are responsive CSS, not a dedicated TV/kiosk mode.
+- QA is manual; there is no automated E2E suite.
 
 ## Sign-off
 

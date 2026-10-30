@@ -77,11 +77,16 @@ The short QA checklist is in `docs/QA-SMOKE-TEST.md` and `docs/TILE-RUSH-QA-TEST
 
 ## Known limitations
 
-- The Android room-control and spectator-input screens are compiled and installed but the final visual pass was blocked by a locked phone and an emulator without DNS.
-- Large-screen CSS is in place for 1920/2560 px; test on the actual mirror/TV before the demo.
-- Live ring data needs a valid Ultrahuman Partner API token. Without it, Insights still opens but ring values are empty.
-- Vercel CLI is currently logged out; the web deploys automatically when the GitHub repo is pushed.
-- The Android APK is a debug build, not a Play Store release.
+- **One ring owner only.** Ultrahuman is configured with a single partner token and `ULTRAHUMAN_USERNAME`. Other accounts can play and see their own runs, but they do not get ring metrics; there is no per-user OAuth/ring-linking flow.
+- **Ring sync is request-driven.** Health data refreshes when the Insights/Health page loads and a stored period is missing or stale. There is no background cron, so a very recent day can lag until the next load.
+- **Solo BPI trusts submitted trials.** The server recomputes BPI from the trial array sent by the client. 1v1 scores are server-authoritative, but solo BPI integrity depends on the client not fabricating trial data; there is no full replay validation.
+- **Accounts have no recovery flow.** Username/password only: no email, password reset, OAuth, 2FA or account merging.
+- **Emote presets and the personal symbol theme are device-local.** They are stored in `localStorage`/`SharedPreferences`, not synced across devices. Room theme and room emote flags do sync for that room.
+- **Spectator mode is live-only.** Up to 20 spectators, read-only, no spectator chat/emotes, and no post-match replay viewer.
+- **The insights helper is rule-based.** It only understands the built-in terms and question patterns; it is not an LLM and is not medical advice.
+- **Android is a debug build.** Min SDK 26, portrait-locked, no Play Store signing/auto-update, and no iOS app.
+- **No dedicated TV/kiosk mode.** Large-screen layouts are responsive CSS; the browser still supplies chrome, and there is no remote-control navigation or auto-fullscreen.
+- **QA is manual.** There is no automated browser/Android E2E suite in the repo; `docs/QA-SMOKE-TEST.md` is the manual checklist.
 
 ## Repository map
 
