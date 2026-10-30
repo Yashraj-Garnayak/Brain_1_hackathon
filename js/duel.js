@@ -132,8 +132,17 @@
     });
   }
 
+  function renderWatchEmoteFeed() {
+    if (!els.watchEmoteFeed) return;
+    els.watchEmoteFeed.innerHTML = watchEmoteLog.map(function (item) {
+      var face = item.emoji ? item.emoji + ' ' : '';
+      return '<span class="watch-emote-chip"><b>' + escName(item.from) + '</b>' +
+        escName(face + item.text) + '</span>';
+    }).join('');
+  }
+
   function syncWatchEmotes() {
-    var on = watching && state === 'watching';
+    var on = watching && (state === 'watching' || state === 'result');
     if (els.watchEmoteBar) els.watchEmoteBar.hidden = !on;
     if (els.watchEmoteToggle) {
       var available = roomSpectatorEmotes;
@@ -141,6 +150,7 @@
       els.watchEmoteToggle.setAttribute('aria-pressed', available && spectatorEmotes ? 'true' : 'false');
       els.watchEmoteToggle.disabled = !available;
     }
+    renderWatchEmoteFeed();
   }
 
   function renderRoomSettings() {
@@ -190,6 +200,8 @@
 
   function clearBubbles() {
     if (els.feed) els.feed.textContent = '';
+    watchEmoteLog = [];
+    renderWatchEmoteFeed();
   }
 
   function syncEmotes() {
