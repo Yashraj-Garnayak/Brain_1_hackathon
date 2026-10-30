@@ -2080,6 +2080,7 @@ body.no-motion .screen-card { transform: none; }
   color: var(--ink);
   text-transform: uppercase;
   letter-spacing: .06em;
+  white-space: nowrap;
 }
 .watch-grid {
   display: grid;
