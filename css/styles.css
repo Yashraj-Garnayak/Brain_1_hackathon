@@ -2974,3 +2974,38 @@ body.badge-open { overflow: hidden; }
   .badge-axis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .tutorial-nav .btn:disabled { opacity: .35; pointer-events: none; }
+
+/* Spectator emote feed toggle. */
+.watch-emote-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.watch-emote-bar[hidden] { display: none !important; }
+.watch-emote-toggle {
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: .12em;
+  cursor: pointer;
+}
+.watch-emote-toggle[aria-pressed="false"] {
+  color: var(--dim);
+  border-color: var(--line);
+  background: transparent;
+}
+
+/* A grid item must not stretch the title pill across the row. */
+@media (min-width: 920px) {
+  .intro-card > .intro-title {
+    justify-self: start;
+    align-self: start;
+    width: fit-content;
+  }
+}

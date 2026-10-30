@@ -29,6 +29,7 @@
     share: $('duelShare'), shareLink: $('duelShareLink'), shareCopy: $('duelShareCopy'),
     room: $('duelRoom'), roomInput: $('roomCodeInput'),
     watchBoards: $('watchBoards'), watchSwitch: $('watchSwitch'),
+    watchEmoteBar: $('watchEmoteBar'), watchEmoteToggle: $('watchEmoteToggle'),
     roomJoin: $('roomJoinBtn'), roomWatch: $('roomWatchBtn'), roomCreate: $('roomCreateBtn')
   };
 
@@ -49,6 +50,9 @@
   var roomCode = '';
   var watching = false;
   var autoWatched = false;
+  var SPECTATOR_EMOTES_KEY = 'tile-rush.spectatorEmotes.v1';
+  var spectatorEmotes = true;
+  try { spectatorEmotes = localStorage.getItem(SPECTATOR_EMOTES_KEY) !== '0'; } catch (e) { /* ignore */ }
   var spectatorCount = 0;
   var watchPlayers = [];
   var watchFocus = 0;
@@ -122,6 +126,19 @@
     });
   }
 
+  function syncWatchEmotes() {
+    var on = watching && state === 'watching';
+    if (els.watchEmoteBar) els.watchEmoteBar.hidden = !on;
+    if (els.watchEmoteToggle) {
+      els.watchEmoteToggle.textContent = spectatorEmotes ? 'ON' : 'OFF';
+      els.watchEmoteToggle.setAttribute('aria-pressed', spectatorEmotes ? 'true' : 'false');
+    }
+  }
+
+  function clearBubbles() {
+    if (els.feed) els.feed.textContent = '';
+  }
+
   function syncEmotes() {
     var live = (mode === 'duel' || mode === 'room') && !watching;
     if (els.emotes) els.emotes.hidden = !(state === 'playing' && live);
@@ -132,6 +149,7 @@
     state = next;
     render();
     syncEmotes();
+    syncWatchEmotes();
   }
 
   function inviteLink() {
@@ -238,7 +256,7 @@
       var b = watchPlayers[1] || null;
       els.kicker.textContent = 'SPECTATING · ' + (roomCode ? 'ROOM ' + roomCode : String(matchId).slice(0, 8).toUpperCase());
       els.title.textContent = 'LIVE';
-      els.lede.textContent = 'You are watching read-only. Emotes and runs stay with the players.';
+      els.lede.textContent = 'You are watching read-only. Player emotes appear here; use the toggle to mute them.';
       els.versus.hidden = false;
       els.youLabel.textContent = 'PLAYER 1';
       els.oppLabel.textContent = 'PLAYER 2';
@@ -251,6 +269,7 @@
       els.note.textContent = (spectatorCount ? spectatorCount + ' watching · ' : '') +
         'Live boards mirror each player\'s current deal.';
       renderWatchBoards();
+      syncWatchEmotes();
       return;
     }
 
@@ -786,6 +805,7 @@
 
     if (msg.type === 'emote') {
       if (msg.from === me) return;
+      if (watching && !spectatorEmotes) return;
       bubble(msg.from || 'OPPONENT', msg.emoji, msg.text, msg.id);
       return;
     }
@@ -861,9 +881,11 @@
     if (!watching) {
       els.watchBoards.hidden = true;
       if (els.watchSwitch) els.watchSwitch.hidden = true;
+      if (els.watchEmoteBar) els.watchEmoteBar.hidden = true;
       return;
     }
     els.watchBoards.hidden = false;
+    syncWatchEmotes();
     if (els.watchSwitch) {
       els.watchSwitch.hidden = false;
       var tabs = els.watchSwitch.querySelectorAll('.watch-tab');
@@ -1216,6 +1238,9 @@
     showScreen(false);
     showHud(false);
     els.emotes.hidden = true;
+    if (els.watchEmoteBar) els.watchEmoteBar.hidden = true;
+    if (els.lobbyEmotes) els.lobbyEmotes.hidden = true;
+    clearBubbles();
     if (window.TileRush && TileRush.toMenu) TileRush.toMenu();
   }
 
@@ -1297,6 +1322,14 @@
   }
   if (els.emotes) els.emotes.addEventListener('click', onEmoteClick);
   if (els.lobbyEmotes) els.lobbyEmotes.addEventListener('click', onEmoteClick);
+  if (els.watchEmoteToggle) {
+    els.watchEmoteToggle.addEventListener('click', function () {
+      spectatorEmotes = !spectatorEmotes;
+      try { localStorage.setItem(SPECTATOR_EMOTES_KEY, spectatorEmotes ? '1' : '0'); } catch (e) { /* ignore */ }
+      if (!spectatorEmotes) clearBubbles();
+      syncWatchEmotes();
+    });
+  }
   paintEmoteBars();
 
   /* Invite links: /?room=CODE opens this lobby with the code filled in. */
