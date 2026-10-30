@@ -88,13 +88,14 @@
     clock: $('clock'), timeValue: $('timeValue'),
     score: $('score'), eloValue: $('eloValue'), eloRank: $('eloRank'), rankDot: $('rankDot'),
     muteBtn: $('muteBtn'), muteIcon: $('muteIcon'),
-    goalCard: $('goalCard'), goalIcon: $('goalIcon'), goalTrack: $('goalTrack'), goalTrackFill: $('goalTrackFill'),
+    goalCard: $('goalCard'), goalIcon: $('goalIcon'), goalCopyTitle: $('goalCopyTitle'),
+    goalTrack: $('goalTrack'), goalTrackFill: $('goalTrackFill'),
     churnValue: $('churnValue'), churnWrap: $('churnValue').parentElement,
     round: $('round'), cycleNum: $('cycleNum'), tier: $('tier'), pips: $('pips'),
     streak: $('streak'), streakWrap: $('streakWrap'),
     pressureFill: $('pressureFill'), pressureLabel: $('pressureLabel'), pressurePct: $('pressurePct'),
     statAcc: $('statAcc'), statRt: $('statRt'), statStreak: $('statStreak'),
-    weakRow: $('weakRow'), runs: $('runs'), gamesCount: $('gamesCount'), bestScore: $('bestScore'),
+    weakRow: $('weakRow'), weakNote: $('weakNote'), runs: $('runs'), gamesCount: $('gamesCount'), bestScore: $('bestScore'),
     musicToggle: $('musicToggle'), motionToggle: $('motionToggle'), symbolToggle: $('symbolToggle'),
     introScreen: $('introScreen'), introBest: $('introBest'), introBpi: $('introBpi'),
     introTitle: $('introTitle'), introElo: $('introElo'), introGames: $('introGames'),
@@ -1054,6 +1055,16 @@
     if (el.symbolToggle) {
       el.symbolToggle.textContent = SAVE.settings.theme === 'sports' ? 'SPORTS' : 'KIDS';
       el.symbolToggle.classList.toggle('off', SAVE.settings.theme !== 'sports');
+    }
+    if (el.goalCopyTitle) {
+      el.goalCopyTitle.textContent = SAVE.settings.theme === 'sports'
+        ? 'Same icon. Same colour.'
+        : 'Same shape. Same colour.';
+    }
+    if (el.weakNote) {
+      el.weakNote.textContent = SAVE.settings.theme === 'sports'
+        ? 'Misses pull these icons back into rotation.'
+        : 'Misses pull these shapes back into rotation.';
     }
     document.body.classList.toggle('no-motion', !SAVE.settings.motion);
   }
