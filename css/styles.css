@@ -3012,3 +3012,36 @@ body.badge-open { overflow: hidden; }
 .sports-glyph text {
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
+
+/* Symbol choice is part of the pre-run screen, never the live board. */
+.intro-symbols {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.intro-symbols .micro { flex: 1; }
+.theme-choice {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #171513;
+}
+.theme-choice button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: .1em;
+  color: var(--muted);
+  cursor: pointer;
+}
+.theme-choice button.active {
+  background: var(--ink);
+  color: #0b0a09;
+  font-weight: 700;
+}

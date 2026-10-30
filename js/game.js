@@ -96,7 +96,7 @@
     pressureFill: $('pressureFill'), pressureLabel: $('pressureLabel'), pressurePct: $('pressurePct'),
     statAcc: $('statAcc'), statRt: $('statRt'), statStreak: $('statStreak'),
     weakRow: $('weakRow'), weakNote: $('weakNote'), runs: $('runs'), gamesCount: $('gamesCount'), bestScore: $('bestScore'),
-    musicToggle: $('musicToggle'), motionToggle: $('motionToggle'), symbolToggle: $('symbolToggle'),
+    musicToggle: $('musicToggle'), motionToggle: $('motionToggle'), themeChoice: $('themeChoice'),
     introScreen: $('introScreen'), introBest: $('introBest'), introBpi: $('introBpi'),
     introTitle: $('introTitle'), introElo: $('introElo'), introGames: $('introGames'),
     startBtn: $('startBtn'), resetBtn: $('resetBtn'),
@@ -808,7 +808,8 @@
 
     G.runId++;
     G.themeSeed = G.duel ? String(G.duelSeed || 'duel') : 'solo:' + G.runId + ':' + Date.now();
-    TS.setTheme(SAVE.settings.theme, G.themeSeed);
+    G.runTheme = SAVE.settings.theme;
+    TS.setTheme(G.runTheme, G.themeSeed);
     G.state = 'countdown';
     G.round = 0;
     G.roundId++;
@@ -1039,8 +1040,9 @@
     persist();
     updateSettingsUI();
   }
-  function toggleSymbols() {
-    SAVE.settings.theme = SAVE.settings.theme === 'sports' ? 'kids' : 'sports';
+  function setSymbolTheme(theme) {
+    if (G.state === 'playing' || G.state === 'countdown' || G.state === 'break') return;
+    SAVE.settings.theme = theme === 'sports' ? 'sports' : 'kids';
     TS.setTheme(SAVE.settings.theme, G.themeSeed || 'preview');
     persist();
     updateSettingsUI();
@@ -1052,9 +1054,11 @@
     el.musicToggle.classList.toggle('off', SAVE.settings.muted);
     el.motionToggle.textContent = SAVE.settings.motion ? 'FULL' : 'LOW';
     el.motionToggle.classList.toggle('off', !SAVE.settings.motion);
-    if (el.symbolToggle) {
-      el.symbolToggle.textContent = SAVE.settings.theme === 'sports' ? 'SPORTS' : 'KIDS';
-      el.symbolToggle.classList.toggle('off', SAVE.settings.theme !== 'sports');
+    var themeButtons = document.querySelectorAll('#themeChoice [data-theme]');
+    for (var t = 0; t < themeButtons.length; t++) {
+      var on = themeButtons[t].getAttribute('data-theme') === SAVE.settings.theme;
+      themeButtons[t].classList.toggle('active', on);
+      themeButtons[t].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     if (el.goalCopyTitle) {
       el.goalCopyTitle.textContent = SAVE.settings.theme === 'sports'
@@ -2255,7 +2259,12 @@
   el.muteBtn.addEventListener('click', toggleMute);
   el.musicToggle.addEventListener('click', toggleMute);
   el.motionToggle.addEventListener('click', toggleMotion);
-  if (el.symbolToggle) el.symbolToggle.addEventListener('click', toggleSymbols);
+  if (el.themeChoice) {
+    el.themeChoice.addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('[data-theme]') : null;
+      if (btn) setSymbolTheme(btn.getAttribute('data-theme'));
+    });
+  }
   el.resetBtn.addEventListener('click', function () {
     if (!window.confirm('Reset your local rating, best score and adaptive history? (Your account is not affected.)')) return;
     SAVE = defaultSave();

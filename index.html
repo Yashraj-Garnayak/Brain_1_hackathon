@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20261030g" />
+  <link rel="stylesheet" href="css/styles.css?v=20261030h" />
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -147,7 +147,6 @@
         <section class="card mini">
           <div class="mini-row"><span class="micro">MUSIC</span><button class="mini-toggle" id="musicToggle" type="button">ON</button></div>
           <div class="mini-row"><span class="micro">MOTION</span><button class="mini-toggle" id="motionToggle" type="button">FULL</button></div>
-          <div class="mini-row"><span class="micro">SYMBOLS</span><button class="mini-toggle" id="symbolToggle" type="button">KIDS</button></div>
         </section>
       </aside>
     </main>
@@ -176,6 +175,13 @@
       </div>
 
       <div class="intro-actions">
+        <div class="intro-symbols">
+          <span class="micro">SYMBOLS</span>
+          <div class="theme-choice" id="themeChoice" role="group" aria-label="Symbol theme">
+            <button type="button" data-theme="kids" class="active" aria-pressed="true">KIDS</button>
+            <button type="button" data-theme="sports" aria-pressed="false">SPORTS</button>
+          </div>
+        </div>
         <button class="btn primary" id="startBtn" type="button">START RUN <span>↵</span></button>
         <button class="btn ghost" id="duelBtn" type="button">PLAY 1V1 <span>⚔</span></button>
         <button class="btn ghost" id="ghostBtn" type="button">RACE YOUR BEST <span>◎</span></button>
@@ -723,15 +729,15 @@
 
   <div class="duel-feed" id="duelFeed" aria-live="polite"></div>
 
-  <script src="js/shapes.js?v=20261030g"></script>
-  <script src="js/audio.js?v=20261030g"></script>
-  <script src="js/background.js?v=20261030g"></script>
-  <script src="shared/bpi.js?v=20261030g"></script>
-  <script src="js/profile.js?v=20261030g"></script>
-  <script src="js/account.js?v=20261030g"></script>
-  <script src="js/emotes.js?v=20261030g"></script>
-  <script src="js/game.js?v=20261030g"></script>
-  <script src="js/badges.js?v=20261030g"></script>
-  <script src="js/duel.js?v=20261030g"></script>
+  <script src="js/shapes.js?v=20261030h"></script>
+  <script src="js/audio.js?v=20261030h"></script>
+  <script src="js/background.js?v=20261030h"></script>
+  <script src="shared/bpi.js?v=20261030h"></script>
+  <script src="js/profile.js?v=20261030h"></script>
+  <script src="js/account.js?v=20261030h"></script>
+  <script src="js/emotes.js?v=20261030h"></script>
+  <script src="js/game.js?v=20261030h"></script>
+  <script src="js/badges.js?v=20261030h"></script>
+  <script src="js/duel.js?v=20261030h"></script>
 </body>
 </html>
