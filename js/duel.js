@@ -1421,12 +1421,16 @@
       if (!isCreator || state !== 'matched') return;
       var themeBtn = event.target.closest ? event.target.closest('[data-room-theme]') : null;
       if (themeBtn) {
-        send({ type: 'settings', theme: themeBtn.getAttribute('data-room-theme'), spectatorEmotes: roomSpectatorEmotes });
+        roomTheme = themeBtn.getAttribute('data-room-theme') === 'sports' ? 'sports' : 'kids';
+        applyRoomSettings({ theme: roomTheme, spectatorEmotes: roomSpectatorEmotes });
+        send({ type: 'settings', theme: roomTheme, spectatorEmotes: roomSpectatorEmotes });
         return;
       }
       var emoteBtn = event.target.closest ? event.target.closest('[data-room-emotes]') : null;
       if (emoteBtn) {
-        send({ type: 'settings', theme: roomTheme, spectatorEmotes: emoteBtn.getAttribute('data-room-emotes') === 'on' });
+        roomSpectatorEmotes = emoteBtn.getAttribute('data-room-emotes') === 'on';
+        applyRoomSettings({ theme: roomTheme, spectatorEmotes: roomSpectatorEmotes });
+        send({ type: 'settings', theme: roomTheme, spectatorEmotes: roomSpectatorEmotes });
       }
     });
   }
