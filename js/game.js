@@ -808,7 +808,7 @@
 
     G.runId++;
     G.themeSeed = G.duel ? String(G.duelSeed || 'duel') : 'solo:' + G.runId + ':' + Date.now();
-    G.runTheme = SAVE.settings.theme;
+    G.runTheme = G.duel ? (G.roomTheme || SAVE.settings.theme) : SAVE.settings.theme;
     TS.setTheme(G.runTheme, G.themeSeed);
     G.state = 'countdown';
     G.round = 0;
@@ -982,6 +982,14 @@
     if (t < G.lockUntil) return;
     var cell = G.layout && G.layout[index];
     if (!cell) return;
+    if (G.duel) {
+      duelHook('input', {
+        round: G.round + 1,
+        deal: G.duelBoard,
+        index: index,
+        correct: cell.key === G.goal.key
+      });
+    }
     if (cell.key === G.goal.key) hitTile(index, cell, t, x, y);
     else missTap(index, cell, t, x, y);
   }
@@ -1047,6 +1055,10 @@
     persist();
     updateSettingsUI();
   }
+  function activeTheme() {
+    return (G.duel && G.runTheme) ? G.runTheme : SAVE.settings.theme;
+  }
+
   function updateSettingsUI() {
     el.muteIcon.textContent = SAVE.settings.muted ? '\u2715' : '\u266a';
     el.muteBtn.setAttribute('aria-pressed', SAVE.settings.muted ? 'true' : 'false');
@@ -1061,12 +1073,12 @@
       themeButtons[t].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     if (el.goalCopyTitle) {
-      el.goalCopyTitle.textContent = SAVE.settings.theme === 'sports'
+      el.goalCopyTitle.textContent = activeTheme() === 'sports'
         ? 'Same icon. Same colour.'
         : 'Same shape. Same colour.';
     }
     if (el.weakNote) {
-      el.weakNote.textContent = SAVE.settings.theme === 'sports'
+      el.weakNote.textContent = activeTheme() === 'sports'
         ? 'Misses pull these icons back into rotation.'
         : 'Misses pull these shapes back into rotation.';
     }
@@ -2417,10 +2429,11 @@
 
   /* ---------- public hooks for the 1v1 layer ---------- */
   window.TileRush = {
-    startDuel: function (seed, opponent) {
+    startDuel: function (seed, opponent, theme) {
       G.duel = true;
       G.duelSeed = String(seed || 'duel');
       G.duelOpp = opponent || null;
+      G.roomTheme = theme === 'sports' ? 'sports' : theme === 'kids' ? 'kids' : null;
       G.duelDeal = 0;
       G.duelBoard = -1;
       G.duelLastSent = 0;
@@ -2431,7 +2444,7 @@
     isDuel: function () { return G.duel; },
     boardAt: function (seedText, round, index) { return duelBoardAt(seedText, round, index); },
     axes: function () { return G.finalMetrics ? G.finalMetrics.axes : null; },
-    applyTheme: function (seed) { TS.setTheme(SAVE.settings.theme, seed); },
+    applyTheme: function (seed, theme) { TS.setTheme(theme || SAVE.settings.theme, seed); },
     duelAdvance: function (solvedDeal, mine) { duelAdvanceLocal(solvedDeal, !!mine); },
     setScore: function (value) {
       if (!G.duel) return;

@@ -836,11 +836,15 @@ a.btn { display: inline-block; text-decoration: none; }
   color: var(--dim); text-transform: uppercase;
 }
 .linkish {
-  border: 0; background: none; padding: 0; cursor: pointer;
-  font: inherit; color: var(--dim); text-decoration: underline; text-underline-offset: 3px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(255, 255, 255, .03); padding: 5px 10px; cursor: pointer;
+  font: inherit; color: var(--muted); text-decoration: none;
   text-transform: none; letter-spacing: normal;
+  transition: border-color .15s, color .15s, background .15s;
 }
-.linkish:hover { color: var(--hot); }
+.linkish:hover { color: var(--ink); border-color: var(--line-strong); background: rgba(255, 255, 255, .06); }
+.linkish.danger { color: var(--hot); }
+.linkish.danger:hover { border-color: rgba(255, 99, 105, .4); }
 
 /* game over */
 .over-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -3044,4 +3048,77 @@ body.badge-open { overflow: hidden; }
   background: var(--ink);
   color: #0b0a09;
   font-weight: 700;
+}
+
+/* Room creator controls: theme + spectator emote visibility. */
+.room-settings {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .025);
+}
+.room-settings[hidden] { display: none !important; }
+.room-settings-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.room-settings-head .micro { flex: 1; }
+.room-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.room-settings-row:first-of-type { border-top: 0; }
+.room-settings-row .micro { flex: 1; min-width: 110px; }
+.room-settings-note { font-size: 9px; line-height: 1.5; color: var(--dim); }
+.room-theme-btn,
+.room-emote-btn {
+  padding: 6px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: .1em;
+  cursor: pointer;
+}
+.room-theme-btn.active,
+.room-emote-btn.active {
+  border-color: rgba(94, 234, 212, .55);
+  background: rgba(94, 234, 212, .12);
+  color: var(--accent);
+}
+.room-theme-btn:disabled,
+.room-emote-btn:disabled { opacity: .4; cursor: default; }
+.watch-tile.input-correct {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(94, 234, 212, .45), 0 0 24px -6px var(--accent);
+}
+.watch-tile.input-wrong {
+  border-color: var(--hot);
+  box-shadow: 0 0 0 2px rgba(255, 99, 105, .45), 0 0 24px -6px var(--hot);
+}
+
+/* Large displays / mirror screens: keep the same layout but raise the
+   smallest labels so the board is readable from across a room. */
+@media (min-width: 1500px) {
+  .micro { font-size: 10px; }
+  .lede { font-size: 16px; }
+  .rules li { font-size: 14px; }
+  .card-note { font-size: 12px; }
+  .intro-foot { font-size: 9.5px; }
+  .section-label { font-size: 9px; }
+  .watch-metrics-name { font-size: 22px; }
+  .watch-metric b { font-size: 22px; }
+  .watch-metric span { font-size: 9px; }
+  .watch-name { font-size: 17px; }
+  .watch-tag { font-size: 9px; }
+  .watch-meta { font-size: 9px; }
 }

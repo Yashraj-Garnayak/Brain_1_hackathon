@@ -30,6 +30,7 @@
     room: $('duelRoom'), roomInput: $('roomCodeInput'),
     watchBoards: $('watchBoards'), watchSwitch: $('watchSwitch'),
     watchEmoteBar: $('watchEmoteBar'), watchEmoteToggle: $('watchEmoteToggle'),
+    roomSettings: $('roomSettings'),
     roomJoin: $('roomJoinBtn'), roomWatch: $('roomWatchBtn'), roomCreate: $('roomCreateBtn')
   };
 
@@ -57,6 +58,9 @@
   var watchPlayers = [];
   var watchFocus = 0;
   var matchSeed = '';
+  var roomTheme = 'kids';
+  var roomSpectatorEmotes = true;
+  var isCreator = false;
   var me = '';
   var opponent = '';
   var myScore = 0;
@@ -130,9 +134,56 @@
     var on = watching && state === 'watching';
     if (els.watchEmoteBar) els.watchEmoteBar.hidden = !on;
     if (els.watchEmoteToggle) {
-      els.watchEmoteToggle.textContent = spectatorEmotes ? 'ON' : 'OFF';
-      els.watchEmoteToggle.setAttribute('aria-pressed', spectatorEmotes ? 'true' : 'false');
+      var available = roomSpectatorEmotes;
+      els.watchEmoteToggle.textContent = !available ? 'OFF BY HOST' : (spectatorEmotes ? 'ON' : 'OFF');
+      els.watchEmoteToggle.setAttribute('aria-pressed', available && spectatorEmotes ? 'true' : 'false');
+      els.watchEmoteToggle.disabled = !available;
     }
+  }
+
+  function renderRoomSettings() {
+    if (!els.roomSettings) return;
+    var roomMatch = mode === 'room' && (state === 'matched' || state === 'watching');
+    els.roomSettings.hidden = !roomMatch;
+    if (!roomMatch) return;
+    var themeLabel = roomTheme === 'sports' ? 'SPORTS' : 'KIDS';
+    if (state === 'watching') {
+      els.roomSettings.innerHTML =
+        '<div class="room-settings-head"><span class="micro">ROOM SETTINGS</span></div>' +
+        '<div class="room-settings-row"><span class="micro">SYMBOLS</span><b class="room-settings-note">' + themeLabel + '</b></div>' +
+        '<div class="room-settings-row"><span class="micro">SPECTATOR EMOTES</span><b class="room-settings-note">' +
+          (roomSpectatorEmotes ? 'ON' : 'OFF BY HOST') + '</b></div>';
+      return;
+    }
+    if (!isCreator) {
+      els.roomSettings.innerHTML =
+        '<div class="room-settings-head"><span class="micro">ROOM SETTINGS</span><span class="room-settings-note">host controls</span></div>' +
+        '<div class="room-settings-row"><span class="micro">SYMBOLS</span><b class="room-settings-note">' + themeLabel + '</b></div>' +
+        '<div class="room-settings-row"><span class="micro">SPECTATOR EMOTES</span><b class="room-settings-note">' +
+          (roomSpectatorEmotes ? 'ON' : 'OFF') + '</b></div>';
+      return;
+    }
+    els.roomSettings.innerHTML =
+      '<div class="room-settings-head"><span class="micro">ROOM SETTINGS</span><span class="room-settings-note">you are the host</span></div>' +
+      '<div class="room-settings-row"><span class="micro">SYMBOLS</span>' +
+        '<button type="button" class="room-theme-btn' + (roomTheme === 'kids' ? ' active' : '') + '" data-room-theme="kids">KIDS</button>' +
+        '<button type="button" class="room-theme-btn' + (roomTheme === 'sports' ? ' active' : '') + '" data-room-theme="sports">SPORTS</button>' +
+      '</div>' +
+      '<div class="room-settings-row"><span class="micro">SPECTATOR EMOTES</span>' +
+        '<button type="button" class="room-emote-btn' + (roomSpectatorEmotes ? ' active' : '') + '" data-room-emotes="on">ON</button>' +
+        '<button type="button" class="room-emote-btn' + (!roomSpectatorEmotes ? ' active' : '') + '" data-room-emotes="off">OFF</button>' +
+      '</div>';
+  }
+
+  function applyRoomSettings(settings) {
+    if (!settings) return;
+    var nextTheme = settings.theme === 'sports' ? 'sports' : 'kids';
+    var nextEmotes = settings.spectatorEmotes !== false;
+    if (!nextEmotes && roomSpectatorEmotes) clearBubbles();
+    roomTheme = nextTheme;
+    roomSpectatorEmotes = nextEmotes;
+    syncWatchEmotes();
+    renderRoomSettings();
   }
 
   function clearBubbles() {
@@ -160,6 +211,7 @@
   function render() {
     var on = state !== 'idle' && state !== 'playing';
     showScreen(on);
+    renderRoomSettings();
     if (state === 'idle') {
       showHud(false);
       return;
@@ -805,8 +857,27 @@
 
     if (msg.type === 'emote') {
       if (msg.from === me) return;
-      if (watching && !spectatorEmotes) return;
+      if (watching && (!spectatorEmotes || !roomSpectatorEmotes)) return;
       bubble(msg.from || 'OPPONENT', msg.emoji, msg.text, msg.id);
+      return;
+    }
+
+    if (msg.type === 'input') {
+      if (!watching) return;
+      var inputName = msg.from;
+      for (var wi = 0; wi < watchPlayers.length; wi++) {
+        if (watchPlayers[wi].name === inputName) {
+          watchPlayers[wi].lastInput = {
+            round: Number(msg.round) || 1,
+            deal: Number(msg.deal) || 0,
+            index: Number(msg.index) || 0,
+            correct: !!msg.correct,
+            at: Number(msg.at) || Date.now()
+          };
+          break;
+        }
+      }
+      renderWatchBoards();
       return;
     }
 
@@ -843,7 +914,8 @@
     spectatorCount = Number(match.spectators) || 0;
     if (match.seed) {
       matchSeed = match.seed;
-      if (window.TileRush && TileRush.applyTheme) TileRush.applyTheme(match.seed);
+      if (match.settings) applyRoomSettings(match.settings);
+      if (window.TileRush && TileRush.applyTheme) TileRush.applyTheme(match.seed, roomTheme);
     }
     watchPlayers = (Array.isArray(match.players) ? match.players : []).map(function (p) {
       return {
@@ -856,7 +928,8 @@
         correct: Number(p.correct) || 0,
         wrong: Number(p.wrong) || 0,
         misses: Number(p.misses) || 0,
-        streak: Number(p.streak) || 0
+        streak: Number(p.streak) || 0,
+        lastInput: p.lastInput || null
       };
     });
 
@@ -918,9 +991,13 @@
       var size = board ? board.size : (round === 1 ? 3 : round === 2 ? 4 : 5);
       var tiles = '';
       if (board && TS) {
+        var input = p && p.lastInput && p.lastInput.round === round && p.lastInput.deal === deal ? p.lastInput : null;
         for (var k = 0; k < board.cells.length; k++) {
           var cell = board.cells[k];
-          tiles += '<i class="watch-tile' + (k === board.goalIndex ? ' goal-cell' : '') + '">' +
+          var inputClass = input && input.index === k
+            ? (input.correct ? ' input-correct' : ' input-wrong')
+            : '';
+          tiles += '<i class="watch-tile' + inputClass + '">' +
             TS.shapeSvg(cell.shape, cell.color) + '</i>';
         }
       } else {
@@ -1013,6 +1090,9 @@
       var you = players.find(function (p) { return p.connected; });
       if (you) me = you.name;
     }
+    if (match.settings) applyRoomSettings(match.settings);
+    var mine = players.find(function (p) { return p.name === me; });
+    isCreator = !!(mine && mine.creator);
     var other = players.find(function (p) { return p.name !== me; });
     if (other) {
       opponent = other.name;
@@ -1063,7 +1143,7 @@
     updateHud();
     setState('playing');
     showHud(true);
-    if (window.TileRush && TileRush.startDuel) TileRush.startDuel(seed, opponent);
+    if (window.TileRush && TileRush.startDuel) TileRush.startDuel(seed, opponent, mode === 'room' ? roomTheme : null);
   }
 
   function startMatchCleanup() {
@@ -1129,6 +1209,17 @@
   function send(payload) {
     if (!socket || socket.readyState !== WebSocket.OPEN) return false;
     try { socket.send(JSON.stringify(payload)); return true; } catch (e) { return false; }
+  }
+
+  function input(data) {
+    if (!socket || watching || state !== 'playing') return;
+    send({
+      type: 'input',
+      round: Math.max(1, Number(data && data.round) || 1),
+      deal: Math.max(0, Number(data && data.deal) || 0),
+      index: Math.max(0, Number(data && data.index) || 0),
+      correct: !!(data && data.correct)
+    });
   }
 
   function progress(data) {
@@ -1325,6 +1416,20 @@
   }
   if (els.emotes) els.emotes.addEventListener('click', onEmoteClick);
   if (els.lobbyEmotes) els.lobbyEmotes.addEventListener('click', onEmoteClick);
+  if (els.roomSettings) {
+    els.roomSettings.addEventListener('click', function (event) {
+      if (!isCreator || state !== 'matched') return;
+      var themeBtn = event.target.closest ? event.target.closest('[data-room-theme]') : null;
+      if (themeBtn) {
+        send({ type: 'settings', theme: themeBtn.getAttribute('data-room-theme'), spectatorEmotes: roomSpectatorEmotes });
+        return;
+      }
+      var emoteBtn = event.target.closest ? event.target.closest('[data-room-emotes]') : null;
+      if (emoteBtn) {
+        send({ type: 'settings', theme: roomTheme, spectatorEmotes: emoteBtn.getAttribute('data-room-emotes') === 'on' });
+      }
+    });
+  }
   if (els.watchEmoteToggle) {
     els.watchEmoteToggle.addEventListener('click', function () {
       spectatorEmotes = !spectatorEmotes;
@@ -1353,6 +1458,7 @@
     primary: primary,
     leave: leave,
     progress: progress,
+    input: input,
     solved: function (data) {
       if (mode === 'ghost') {
         /* Ghost races are local: confirm the read immediately. */
