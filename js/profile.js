@@ -114,6 +114,7 @@
   var openSeason = null;
   var lastProfile = null;
   var lastSelf = false;
+  var lastAxes = null;
 
   var SEASON_METRICS = {
     bpi: {
@@ -419,6 +420,7 @@
 
     lastProfile = profile;
     lastSelf = !!isSelf;
+    lastAxes = axes;
     renderSeasons(profile, isSelf);
 
     var radar = $('profileRadar');
@@ -498,6 +500,7 @@
   window.ProfileUI = {
     radarSVG: radarSVG,
     render: render,
+    axes: function () { return lastAxes; },
     titleColor: titleColor,
     seasonLabel: seasonLabel,
     regionLabel: regionLabel

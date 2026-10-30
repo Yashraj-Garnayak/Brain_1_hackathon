@@ -27,15 +27,24 @@
   AXES.forEach(function (a) { AXIS_BY_KEY[a.key] = a; });
 
   var TITLES = [
-    { min: 930, name: 'NOVA',         color: '#c084fc', note: 'top of the board' },
-    { min: 850, name: 'MAESTRO',      color: '#fb7185', note: 'reads the whole board at once' },
-    { min: 760, name: 'TACTICIAN',    color: '#fb923c', note: 'turns pressure into points' },
-    { min: 660, name: 'SHARPSHOOTER', color: '#fbbf24', note: 'fast and hard to rattle' },
-    { min: 560, name: 'TRACKER',      color: '#a3e635', note: 'reliable under churn' },
-    { min: 440, name: 'HUNTER',       color: '#34d399', note: 'finding the target more often' },
-    { min: 320, name: 'SCOUT',        color: '#38bdf8', note: 'building the scan' },
-    { min: 200, name: 'SPARK',        color: '#94a3b8', note: 'the reflex is waking up' },
-    { min: 0,   name: 'DRIFTER',      color: '#64748b', note: 'first runs, no read yet' }
+    { min: 930, name: 'NOVA',         color: '#c084fc', note: 'top of the board',
+      desc: 'The top band. Fast, precise and consistent across every board size.' },
+    { min: 850, name: 'MAESTRO',      color: '#fb7185', note: 'reads the whole board at once',
+      desc: 'Near-elite speed with very few wrong taps. The whole board is one pattern.' },
+    { min: 760, name: 'TACTICIAN',    color: '#fb923c', note: 'turns pressure into points',
+      desc: 'Strong late-round capacity and recovery. Pressure makes the read sharper.' },
+    { min: 660, name: 'SHARPSHOOTER', color: '#fbbf24', note: 'fast and hard to rattle',
+      desc: 'High speed and precision with steady timing. Fast, accurate and difficult to tilt.' },
+    { min: 560, name: 'TRACKER',      color: '#a3e635', note: 'reliable under churn',
+      desc: 'Handles target changes without losing the read. Reliable when the deck turns.' },
+    { min: 440, name: 'HUNTER',       color: '#34d399', note: 'finding the target more often',
+      desc: 'The scan is starting to click. Accuracy is climbing and fewer reads are wasted.' },
+    { min: 320, name: 'SCOUT',        color: '#38bdf8', note: 'building the scan',
+      desc: 'Accuracy is improving faster than speed. The basic scan pattern is forming.' },
+    { min: 200, name: 'SPARK',        color: '#94a3b8', note: 'the reflex is waking up',
+      desc: 'Early runs are starting to look repeatable. The reflex is waking up.' },
+    { min: 0,   name: 'DRIFTER',      color: '#64748b', note: 'first runs, no read yet',
+      desc: 'First runs, no read yet. Play a few scored runs to establish a fingerprint.' }
   ];
 
   var ARCHETYPES = {
@@ -45,6 +54,16 @@
     GRINDER: 'Wins by surviving difficulty rather than by raw speed. Strong late-round profile.',
     SWITCHBACK: 'Adapts to a changed target quickly, but the timing can swing while doing it.',
     'ALL-ROUNDER': 'No single leak. The next gain comes from raising the floor, not the ceiling.'
+  };
+
+  // Rules are checked top to bottom; the first match wins.
+  var ARCHETYPE_RULES = {
+    SCANNER: 'Speed ≥ 60 · Search ≥ 60 · Precision < 52',
+    SNIPER: 'Precision ≥ 62 · Consistency ≥ 58',
+    METRONOME: 'Consistency ≥ 62 · Resilience ≥ 55',
+    GRINDER: 'Capacity ≥ 60 · Resilience ≥ 50',
+    SWITCHBACK: 'Updating ≥ 58 · Consistency < 52',
+    'ALL-ROUNDER': 'None of the specialist rules match'
   };
 
   function titleFor(bpi) {
@@ -320,6 +339,7 @@
     AXIS_BY_KEY: AXIS_BY_KEY,
     TITLES: TITLES,
     ARCHETYPES: ARCHETYPES,
+    ARCHETYPE_RULES: ARCHETYPE_RULES,
     titleFor: titleFor,
     archetypeFor: archetypeFor,
     compute: compute,

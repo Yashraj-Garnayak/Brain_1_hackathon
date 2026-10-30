@@ -1586,7 +1586,11 @@
       return;
     }
     if (signedIn()) { startRun(); return; }
-    if (guestMode) { startRun(); return; }
+    if (guestMode) {
+      if (!tutorialDone()) { openTutorial(0, true, startRun); return; }
+      startRun();
+      return;
+    }
     if (!Account) { openAuth(true); return; }
     Account.ready().then(function (user) {
       if (user) startRun();
@@ -1619,7 +1623,8 @@
     el.authSubmit.disabled = true;
     el.authSubmit.innerHTML = authMode === 'register' ? 'CREATING…' : 'LOGGING IN…';
 
-    var call = authMode === 'register'
+    var wasRegister = authMode === 'register';
+    var call = wasRegister
       ? Account.register(username, password)
       : Account.login(username, password);
 
@@ -1630,6 +1635,10 @@
       renderAccount();
       refreshMeta();
       loadGlobalCard();
+      if (wasRegister) {
+        openTutorial(0, true, function () { if (shouldStart) startRun(); });
+        return;
+      }
       if (shouldStart) startRun();
       else closeAuth();
     }).catch(function (err) {
@@ -2066,6 +2075,29 @@
     }
   ];
   var tutorialPage = 0;
+  var tutorialForced = false;
+  var tutorialAfter = null;
+  var TUTORIAL_KEY = 'tile-rush.tutorial.v1';
+
+  function tutorialDone() {
+    try { return localStorage.getItem(TUTORIAL_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function accountTutorialKey(name) {
+    return 'tile-rush.tutorial.account.' + String(name || '').toLowerCase();
+  }
+
+  function accountTutorialDone(name) {
+    try { return localStorage.getItem(accountTutorialKey(name)) === '1'; } catch (e) { return false; }
+  }
+
+  function markTutorialDone() {
+    try {
+      localStorage.setItem(TUTORIAL_KEY, '1');
+      var user = Account && Account.user();
+      if (user) localStorage.setItem(accountTutorialKey(user.username), '1');
+    } catch (e) { /* ignore */ }
+  }
 
   function renderTutorial() {
     var page = TUTORIAL[tutorialPage];
@@ -2092,7 +2124,9 @@
     for (var p = 0; p < page.points.length; p++) points += '<li>' + page.points[p] + '</li>';
     el.tutorialPoints.innerHTML = points;
 
-    el.tutorialPrev.textContent = tutorialPage === 0 ? 'CLOSE' : 'BACK';
+    el.tutorialPrev.textContent = tutorialPage === 0 ? (tutorialForced ? 'BACK' : 'CLOSE') : 'BACK';
+    el.tutorialPrev.disabled = tutorialForced && tutorialPage === 0;
+    if (el.tutorialClose) el.tutorialClose.hidden = tutorialForced;
     el.tutorialNext.textContent = tutorialPage === TUTORIAL.length - 1 ? 'GOT IT' : 'NEXT';
 
     var dots = '';
@@ -2102,21 +2136,46 @@
 
   var tutorialReturn = null;
 
-  function openTutorial(page) {
+  function openTutorial(page, forced, after) {
     tutorialReturn = el.profileScreen.classList.contains('show') ? el.profileScreen
       : el.boardScreen.classList.contains('show') ? el.boardScreen
       : el.insightsScreen && el.insightsScreen.classList.contains('show') ? el.insightsScreen
       : null;
+    tutorialForced = !!forced;
+    tutorialAfter = typeof after === 'function' ? after : null;
     tutorialPage = Math.max(0, Math.min(TUTORIAL.length - 1, Number(page) || 0));
     renderTutorial();
     showScreen(el.tutorialScreen);
-    try { localStorage.setItem('tile-rush.tutorial.v1', '1'); } catch (e) { /* ignore */ }
   }
 
   function closeTutorial() {
-    if (tutorialReturn) showScreen(tutorialReturn);
-    else showScreen(G.state === 'over' ? el.overScreen : G.state === 'intro' ? el.introScreen : null);
+    var after = tutorialAfter;
+    var back = tutorialReturn;
+    tutorialAfter = null;
     tutorialReturn = null;
+    tutorialForced = false;
+    if (el.tutorialClose) el.tutorialClose.hidden = false;
+    if (after) { after(); return; }
+    if (back) showScreen(back);
+    else showScreen(G.state === 'over' ? el.overScreen : G.state === 'intro' ? el.introScreen : null);
+  }
+
+  function finishTutorial() {
+    markTutorialDone();
+    closeTutorial();
+  }
+
+  function maybeForceTutorial(user) {
+    if (el.tutorialScreen && el.tutorialScreen.classList.contains('show')) return;
+    if (user) {
+      /* New accounts are forced on their first signed-in visit, on any device,
+         until they finish the tutorial or bank a run. */
+      if (!accountTutorialDone(user.username) && Number(user.games || 0) === 0) {
+        openTutorial(0, true);
+      }
+    } else if (!tutorialDone()) {
+      openTutorial(0, true);
+    }
   }
 
   /* ---------- boot ---------- */
@@ -2149,9 +2208,8 @@
   renderDevicesPanel();
   setHomeRank(homeRankEnabled());
   syncSectionNav(el.introScreen);
-  try {
-    if (SAVE.games === 0 && !localStorage.getItem('tile-rush.tutorial.v1')) openTutorial(0);
-  } catch (e) { /* ignore */ }
+  /* Guest players must see the tutorial once; new accounts must see it on
+     their first signed-in visit even if they already watched as a guest. */
 
   el.startBtn.addEventListener('click', requestStart);
   el.againBtn.addEventListener('click', requestStart);
@@ -2227,11 +2285,12 @@
   el.tutorialBtn.addEventListener('click', function () { openTutorial(0); });
   el.tutorialClose.addEventListener('click', closeTutorial);
   el.tutorialPrev.addEventListener('click', function () {
-    if (tutorialPage === 0) closeTutorial();
-    else { tutorialPage -= 1; renderTutorial(); }
+    if (tutorialPage === 0) {
+      if (!tutorialForced) closeTutorial();
+    } else { tutorialPage -= 1; renderTutorial(); }
   });
   el.tutorialNext.addEventListener('click', function () {
-    if (tutorialPage === TUTORIAL.length - 1) closeTutorial();
+    if (tutorialPage === TUTORIAL.length - 1) finishTutorial();
     else { tutorialPage += 1; renderTutorial(); }
   });
   el.introProfileBtn.addEventListener('click', function () {
@@ -2273,6 +2332,10 @@
     guestMode = true;
     pendingStart = false;
     closeAuth();
+    if (!tutorialDone()) {
+      openTutorial(0, true, function () { if (shouldStart) startRun(); });
+      return;
+    }
     if (shouldStart) startRun();
   });
 
@@ -2310,6 +2373,7 @@
       }
       loadGlobalCard();
       loadRank();
+      maybeForceTutorial(user);
     });
     Account.init();
   } else {
@@ -2331,6 +2395,7 @@
     },
     isDuel: function () { return G.duel; },
     boardAt: function (seedText, round, index) { return duelBoardAt(seedText, round, index); },
+    axes: function () { return G.finalMetrics ? G.finalMetrics.axes : null; },
     duelAdvance: function (solvedDeal, mine) { duelAdvanceLocal(solvedDeal, !!mine); },
     setScore: function (value) {
       if (!G.duel) return;
